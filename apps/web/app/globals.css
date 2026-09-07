@@ -1,0 +1,133 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-bg: #eff2f7;
+  --color-surface: #ffffff;
+  --color-surface-2: #e7ebf3;
+  --color-sunken: #e2e7f1;
+  --color-line: #c7d0e1;
+  --color-line-soft: #dce2ee;
+  --color-text: #131a2b;
+  --color-muted: #57627c;
+  --color-faint: #8590a8;
+  --color-accent: #2a57c6;
+  --color-accent-soft: #dfe6f8;
+  --color-brass: #8a6712;
+  --color-brass-soft: #f0e6cf;
+
+  --font-display: 'Bai Jamjuree', 'IBM Plex Sans Thai', system-ui, sans-serif;
+  --font-sans: 'IBM Plex Sans Thai', 'Noto Sans Thai', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --radius-card: 6px;
+  --ease-ui: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ธีมมืดตามค่าของเครื่องผู้ใช้ แต่ถ้าผู้ใช้เลือกสว่างไว้ชัดเจน ค่าที่เลือกต้องชนะ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #0b111e;
+    --color-surface: #111a2b;
+    --color-surface-2: #172134;
+    --color-sunken: #0e1626;
+    --color-line: #26314a;
+    --color-line-soft: #1c2640;
+    --color-text: #e2e8f5;
+    --color-muted: #909dbb;
+    --color-faint: #6c789a;
+    --color-accent: #88a9ff;
+    --color-accent-soft: #1b2a4d;
+    --color-brass: #d9b463;
+    --color-brass-soft: #2c2415;
+  }
+}
+
+/* และถ้าผู้ใช้เลือกมืดไว้ชัดเจน ก็ต้องชนะเครื่องที่ตั้งเป็นสว่างเช่นกัน */
+:root[data-theme='dark'] {
+  --color-bg: #0b111e;
+  --color-surface: #111a2b;
+  --color-surface-2: #172134;
+  --color-sunken: #0e1626;
+  --color-line: #26314a;
+  --color-line-soft: #1c2640;
+  --color-text: #e2e8f5;
+  --color-muted: #909dbb;
+  --color-faint: #6c789a;
+  --color-accent: #88a9ff;
+  --color-accent-soft: #1b2a4d;
+  --color-brass: #d9b463;
+  --color-brass-soft: #2c2415;
+}
+
+@layer base {
+  html {
+    color-scheme: light dark;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  /* ชิ้นส่วนที่ใช้ซ้ำทั้งเว็บ เก็บไว้ที่เดียวเพื่อให้ระยะและเส้นตรงกันทุกหน้า */
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line-soft);
+    border-radius: var(--radius-card);
+  }
+
+  .label {
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+  }
+
+  .rise {
+    animation: rise 0.45s var(--ease-ui) both;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ผู้ใช้ที่ตั้งค่าลดการเคลื่อนไหวไว้ ต้องไม่เจอการเคลื่อนไหวใด ๆ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .rise {
+    animation: none;
+  }
+}

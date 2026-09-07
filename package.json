@@ -1,0 +1,28 @@
+{
+  "name": "repolens",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "อ่านและอธิบายโค้ดทั้ง repo เป็นภาษาไทยจากลิงก์เดียว",
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm --filter @repolens/shared build && pnpm --filter @repolens/api build && pnpm --filter @repolens/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "changelog:build": "node scripts/build-changelog.mjs",
+    "changelog:check": "node scripts/check-changelog.mjs",
+    "release": "node scripts/release.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "@repolens/shared": "workspace:*"
+  }
+}

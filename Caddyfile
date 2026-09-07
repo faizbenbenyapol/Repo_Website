@@ -1,0 +1,18 @@
+# Caddy มีหน้าที่เดียว: ขอใบรับรอง TLS แล้วส่งทุกอย่างไปที่ web
+# ส่วน /api ถูกส่งต่อไป Fastify ด้วย rewrite ของ Next เอง จึงไม่ต้องแยกกฎตรงนี้
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+	}
+
+	reverse_proxy web:3000
+}

@@ -1,0 +1,43 @@
+# สภาพแวดล้อมสำหรับพัฒนา — ใช้ผ่าน `make dev` เท่านั้น ไม่มีการรันบนเครื่องตัวเอง
+services:
+  api:
+    build:
+      context: .
+      target: source
+    command: sh -c "pnpm --filter @repolens/shared build && pnpm --filter @repolens/api dev"
+    environment:
+      APP_VERSION: ${APP_VERSION:-0.0.0-dev}
+      GIT_SHA: ${GIT_SHA:-dev}
+      CHANGELOG_DIR: /app/docs/changelog
+      LOG_LEVEL: debug
+      PORT: 3001
+    volumes:
+      - ./apps:/app/apps
+      - ./packages:/app/packages
+      - ./docs:/app/docs
+      - ./scripts:/app/scripts
+    ports:
+      - '3001:3001'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/api/health']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  web:
+    build:
+      context: .
+      target: source
+    command: sh -c "pnpm --filter @repolens/shared build && pnpm --filter @repolens/web dev"
+    environment:
+      API_ORIGIN: http://api:3001
+      NEXT_TELEMETRY_DISABLED: '1'
+    volumes:
+      - ./apps:/app/apps
+      - ./packages:/app/packages
+    ports:
+      - '3000:3000'
+    depends_on:
+      api:
+        condition: service_healthy

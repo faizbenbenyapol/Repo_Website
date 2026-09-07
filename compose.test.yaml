@@ -1,0 +1,61 @@
+# ชุดทดสอบทั้งหมด — ทั้ง `make test` และ CI เรียกไฟล์นี้ไฟล์เดียวกัน
+services:
+  test:
+    build:
+      context: .
+      target: test
+    environment:
+      CI: 'true'
+
+  api:
+    build:
+      context: .
+      target: api
+      args:
+        APP_VERSION: ${APP_VERSION:-0.0.0-test}
+        GIT_SHA: ${GIT_SHA:-test}
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  web:
+    build:
+      context: .
+      target: web
+    environment:
+      API_ORIGIN: http://api:3001
+      NEXT_TELEMETRY_DISABLED: '1'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  e2e:
+    build:
+      context: .
+      target: e2e
+    environment:
+      E2E_BASE_URL: http://web:3000
+    depends_on:
+      web:
+        condition: service_healthy
