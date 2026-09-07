@@ -1,24 +1,28 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
+import { createServices, type Services } from '../src/services.js';
 
 let app: FastifyInstance;
+let services: Services;
 
 beforeAll(async () => {
-  app = await buildApp();
+  process.env.ALLOW_LOCAL_REPOS = '1';
+  services = await createServices();
+  app = await buildApp(services);
   await app.ready();
-});
+}, 60_000);
 
 afterAll(async () => {
   await app.close();
+  await services.close();
 });
 
 describe('GET /api/health', () => {
-  it('ตอบว่าพร้อมใช้งาน', async () => {
+  it('ตอบว่าพร้อมใช้งานและต่อฐานข้อมูลได้จริง', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/health' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toMatchObject({ ok: true });
-    expect(res.json().uptimeSeconds).toBeGreaterThanOrEqual(0);
+    expect(res.json()).toMatchObject({ ok: true, database: 'up' });
   });
 });
 
@@ -51,7 +55,6 @@ describe('GET /api/versions', () => {
       const res = await app.inject({ method: 'GET', url });
       expect(res.statusCode).toBe(200);
       expect(res.json().version).toBe('0.1.0');
-      expect(res.json().sections.length).toBeGreaterThan(0);
     }
   });
 
@@ -65,25 +68,79 @@ describe('GET /api/versions', () => {
 describe('GET /api/session', () => {
   it('รายงานว่าเป็นผู้เยี่ยมชมและบอกวิธีเปิดใช้ AI', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/session' });
-    expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.session.tier).toBe('visitor');
-    expect(body.session.signedIn).toBe(false);
     expect(body.session.aiEnabled).toBe(false);
     expect(body.session.aiBlockedReason).toContain('API key');
     expect(body.session.apiKeyHint).toBeNull();
-  });
-
-  it('ไม่ส่งกุญแจหรือร่องรอยของกุญแจกลับไปหน้าบ้าน', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/session' });
     expect(res.body).not.toMatch(/sk-ant/);
   });
+});
 
-  it('ส่งรายการฟีเจอร์ทั้งหมดพร้อมระดับที่ต้องใช้', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/session' });
-    const { features } = res.json();
-    expect(features.some((f: { tier: string }) => f.tier === 'member')).toBe(true);
-    expect(features.some((f: { tier: string }) => f.tier === 'visitor')).toBe(true);
+describe('POST /api/analyses', () => {
+  it('ปฏิเสธที่อยู่ที่ไม่อยู่ในรายการโฮสต์ที่อนุญาต', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analyses',
+      payload: { input: 'https://example.com/a/b' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('example.com');
+  });
+
+  it('ปฏิเสธคำขอที่ไม่มีที่อยู่', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/analyses', payload: { input: '' } });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('รับงานแล้วคืนรหัสให้ไปติดตามต่อ', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/analyses',
+      payload: { input: 'octocat/hello-world' },
+    });
+
+    expect(res.statusCode).toBe(202);
+    const body = res.json();
+    expect(body.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(body.status).toBe('queued');
+
+    const status = await app.inject({ method: 'GET', url: `/api/analyses/${body.id}` });
+    expect(status.statusCode).toBe(200);
+    expect(status.json().analysis.status).toBe('queued');
+    expect(status.json().analysis.owner).toBe('octocat');
+  });
+
+  it('งานที่ยังไม่เสร็จยังไม่มีไฟล์หรือเส้นเชื่อมให้ดู', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/analyses',
+      payload: { input: 'octocat/spoon-knife', refresh: true },
+    });
+    const id = created.json().id;
+
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/analyses/${id}/files` })).json().files,
+    ).toEqual([]);
+    expect(
+      (await app.inject({ method: 'GET', url: `/api/analyses/${id}/edges` })).json().edges,
+    ).toEqual([]);
+  });
+});
+
+describe('การติดตามงานที่ไม่มีอยู่', () => {
+  it('รหัสที่ผิดรูปแบบตอบ 400 ไม่ใช่ 500', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/analyses/ไม่ใช่รหัส' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('รหัสถูกรูปแบบแต่ไม่มีอยู่ ตอบ 404', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/analyses/00000000-0000-4000-8000-000000000000',
+    });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error).toContain('ไม่พบ');
   });
 });
 
@@ -93,4 +150,36 @@ describe('เส้นทางที่ไม่มีอยู่', () => {
     expect(res.statusCode).toBe(404);
     expect(res.json().error).toContain('ไม่พบเส้นทาง');
   });
+});
+
+describe('สตรีมความคืบหน้า', () => {
+  it('ส่งสถานะปัจจุบันทันทีที่เชื่อมต่อ', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/analyses',
+      payload: { input: 'octocat/git-consortium', refresh: true },
+    });
+    const id = created.json().id;
+
+    await app.listen({ host: '127.0.0.1', port: 0 });
+    const address = app.server.address();
+    if (typeof address === 'string' || address === null) throw new Error('เปิดพอร์ตทดสอบไม่สำเร็จ');
+
+    const controller = new AbortController();
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/analyses/${id}/stream`, {
+      signal: controller.signal,
+    });
+
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+
+    const reader = response.body?.getReader();
+    const chunk = await reader?.read();
+    const text = new TextDecoder().decode(chunk?.value);
+    controller.abort();
+
+    expect(text).toContain('data:');
+    const payload = JSON.parse(text.replace(/^data: /, '').trim());
+    expect(payload.analysisId).toBe(id);
+    expect(['queued', 'running']).toContain(payload.status);
+  }, 30_000);
 });

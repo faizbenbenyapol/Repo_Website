@@ -1,7 +1,9 @@
 import { buildApp } from './app.js';
 import { config } from './config.js';
+import { createServices } from './services.js';
 
-const app = await buildApp();
+const services = await createServices();
+const app = await buildApp(services);
 
 try {
   await app.listen({ host: config.host, port: config.port });
@@ -16,6 +18,10 @@ try {
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
-    void app.close().then(() => process.exit(0));
+    void (async () => {
+      await app.close();
+      await services.close();
+      process.exit(0);
+    })();
   });
 }

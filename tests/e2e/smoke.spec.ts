@@ -8,7 +8,7 @@ test('หน้าแรกบอกได้ว่าเว็บนี้ท�
   await expect(page.getByText('API key ของ Claude ที่เป็นของคุณเอง')).toBeVisible();
 });
 
-test('ช่องใส่ลิงก์ทักเมื่อพิมพ์ผิด และรับได้เมื่อพิมพ์ถูก', async ({ page }) => {
+test('ช่องใส่ลิงก์ทักทันทีเมื่อพิมพ์ที่อยู่ไม่ถูกต้อง', async ({ page }) => {
   await page.goto('/');
   const input = page.getByLabel('ที่อยู่ repo ที่ต้องการอ่าน');
 
@@ -16,9 +16,10 @@ test('ช่องใส่ลิงก์ทักเมื่อพิมพ�
   await page.getByRole('button', { name: 'อ่าน repo นี้' }).click();
   await expect(page.getByRole('status')).toContainText('อ่านที่อยู่นี้ไม่ออก');
 
-  await input.fill('https://github.com/facebook/react');
+  await input.fill('https://example.com/a/b');
   await page.getByRole('button', { name: 'อ่าน repo นี้' }).click();
-  await expect(page.getByRole('status')).toContainText('facebook/react');
+  await expect(page.getByRole('status')).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
 });
 
 test('ป้ายเวอร์ชันพาไปหน้าประวัติที่อ่านย้อนหลังได้', async ({ page }) => {

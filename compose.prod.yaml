@@ -1,23 +1,69 @@
 # สิ่งที่รันจริงบนเซิร์ฟเวอร์ — ดึงอิมเมจที่ CI สร้างไว้ ไม่ build บนเครื่องปลายทาง
+name: repolens
+
+x-data-env: &data-env
+  DATABASE_URL: postgres://repolens:${POSTGRES_PASSWORD}@postgres:5432/repolens
+  REDIS_URL: redis://redis:6379
+
 services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: repolens
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: repolens
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U repolens']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   api:
     image: ${IMAGE_REPO:-ghcr.io/benyapol/repolens}-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
+      <<: *data-env
       NODE_ENV: production
       LOG_LEVEL: info
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
     healthcheck:
       test:
-        [
-          'CMD',
-          'node',
-          '-e',
-          "fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
+        - CMD
+        - node
+        - -e
+        - fetch('http://localhost:3001/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 30s
+
+  worker:
+    image: ${IMAGE_REPO:-ghcr.io/benyapol/repolens}-worker:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      <<: *data-env
+      NODE_ENV: production
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      MAX_FILES: ${MAX_FILES:-50000}
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
 
   web:
     image: ${IMAGE_REPO:-ghcr.io/benyapol/repolens}-web:${IMAGE_TAG:-latest}
@@ -27,16 +73,13 @@ services:
       API_ORIGIN: http://api:3001
       NEXT_TELEMETRY_DISABLED: '1'
     depends_on:
-      api:
-        condition: service_healthy
+      api: { condition: service_healthy }
     healthcheck:
       test:
-        [
-          'CMD',
-          'node',
-          '-e',
-          "fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
+        - CMD
+        - node
+        - -e
+        - fetch('http://localhost:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
       interval: 15s
       timeout: 5s
       retries: 5
@@ -56,9 +99,10 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     depends_on:
-      web:
-        condition: service_healthy
+      web: { condition: service_healthy }
 
 volumes:
+  pgdata:
+  redisdata:
   caddy-data:
   caddy-config:

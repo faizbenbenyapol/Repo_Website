@@ -1,6 +1,6 @@
 {
   "name": "repolens",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "อ่านและอธิบายโค้ดทั้ง repo เป็นภาษาไทยจากลิงก์เดียว",
@@ -9,7 +9,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "pnpm --filter @repolens/shared build && pnpm --filter @repolens/api build && pnpm --filter @repolens/web build",
+    "build": "pnpm --filter @repolens/shared build && pnpm --filter @repolens/analyzer build && pnpm --filter @repolens/api build && pnpm --filter @repolens/web build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "format": "prettier --write .",

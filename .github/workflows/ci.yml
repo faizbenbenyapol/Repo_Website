@@ -64,6 +64,20 @@ jobs:
           echo "built_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
           echo "repo=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
+      - name: worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: worker
+          push: true
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            GIT_SHA=${{ github.sha }}
+            BUILT_AT=${{ steps.meta.outputs.built_at }}
+          tags: |
+            ${{ steps.meta.outputs.repo }}-worker:${{ github.ref_name }}
+            ${{ steps.meta.outputs.repo }}-worker:latest
+
       - name: api
         uses: docker/build-push-action@v6
         with:

@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 /** ยอมรับทั้ง "owner/name", ลิงก์เต็ม และลิงก์ที่มี .git หรือ path ต่อท้าย */
@@ -20,54 +21,69 @@ export function parseRepoRef(input: string): { owner: string; name: string } | n
 }
 
 export function RepoInput() {
+  const router = useRouter();
   const [value, setValue] = useState('');
-  const [message, setMessage] = useState<{ kind: 'error' | 'info'; text: string } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    setError(null);
+
+    if (!parseRepoRef(value)) {
+      setError('อ่านที่อยู่นี้ไม่ออก ลองใส่แบบ facebook/react หรือลิงก์เต็มของ GitHub');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await fetch('/api/analyses', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ input: value.trim() }),
+      });
+      const body = (await response.json()) as { id?: string; error?: string };
+
+      if (!response.ok || !body.id) {
+        setError(body.error ?? 'สั่งวิเคราะห์ไม่สำเร็จ ลองใหม่อีกครั้ง');
+        setBusy(false);
+        return;
+      }
+
+      router.push(`/analyzing/${body.id}`);
+    } catch {
+      setError('ติดต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
+      setBusy(false);
+    }
+  }
 
   return (
-    <form
-      className="mt-8"
-      onSubmit={(event) => {
-        event.preventDefault();
-        const ref = parseRepoRef(value);
-        if (!ref) {
-          setMessage({
-            kind: 'error',
-            text: 'อ่านที่อยู่นี้ไม่ออก ลองใส่แบบ facebook/react หรือลิงก์เต็มของ GitHub',
-          });
-          return;
-        }
-        setMessage({
-          kind: 'info',
-          text: `อ่าน ${ref.owner}/${ref.name} ได้แล้ว — ไปป์ไลน์วิเคราะห์จะเปิดใช้ในรุ่น v0.2.0`,
-        });
-      }}
-    >
+    <form className="mt-8" onSubmit={submit}>
       <div className="flex flex-col gap-2 sm:flex-row">
         <input
           aria-label="ที่อยู่ repo ที่ต้องการอ่าน"
           className="w-full rounded-[6px] border border-line bg-surface px-4 py-3 font-mono text-sm outline-none transition-colors placeholder:text-faint focus:border-accent"
+          disabled={busy}
           onChange={(event) => {
             setValue(event.target.value);
-            setMessage(null);
+            setError(null);
           }}
           placeholder="facebook/react หรือ https://github.com/facebook/react"
           spellCheck={false}
           value={value}
         />
         <button
-          className="shrink-0 rounded-[6px] border border-accent bg-accent px-6 py-3 text-sm font-medium text-white transition-transform duration-150 hover:-translate-y-px active:translate-y-0"
+          className="shrink-0 rounded-[6px] border border-accent bg-accent px-6 py-3 text-sm font-medium text-white transition-transform duration-150 hover:-translate-y-px active:translate-y-0 disabled:opacity-60"
+          disabled={busy}
           type="submit"
         >
-          อ่าน repo นี้
+          {busy ? 'กำลังส่งงาน…' : 'อ่าน repo นี้'}
         </button>
       </div>
 
-      {message ? (
-        <p
-          className={`rise mt-3 text-sm ${message.kind === 'error' ? 'text-brass' : 'text-muted'}`}
-          role="status"
-        >
-          {message.text}
+      {error ? (
+        <p className="rise mt-3 text-sm text-brass" role="status">
+          {error}
         </p>
       ) : (
         <p className="mt-3 text-sm text-faint">
