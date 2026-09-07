@@ -52,17 +52,17 @@ export const FEATURES: Feature[] = [
   {
     id: 'dependency-graph',
     name: 'กราฟความสัมพันธ์ระหว่างไฟล์',
-    detail: 'ลากซูมได้ สลับโหมดสีตามโฟลเดอร์ ชั้น ความถี่แก้ไข หรือรัศมีผลกระทบ',
+    detail: 'ลากซูมได้ สลับโหมดสีตามโฟลเดอร์ ภาษา หรือความสำคัญของไฟล์',
     tier: 'visitor',
-    status: 'planned',
+    status: 'shipped',
     since: '0.3.0',
   },
   {
     id: 'file-explorer',
     name: 'ตัวสำรวจไฟล์และรายการฟังก์ชัน',
-    detail: 'เปิดไฟล์ดูโค้ดพร้อมรายการ symbol ที่อยู่ในไฟล์นั้น',
+    detail: 'เลือกไฟล์แล้วเห็นฟังก์ชันและคลาสข้างใน พร้อมไฟล์ที่เกี่ยวข้องทั้งสองทิศทาง',
     tier: 'visitor',
-    status: 'planned',
+    status: 'shipped',
     since: '0.3.0',
   },
   {

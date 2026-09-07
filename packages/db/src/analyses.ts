@@ -332,3 +332,115 @@ export async function countSymbols(sql: Db, id: string): Promise<number> {
   `;
   return Number(rows[0]?.count ?? 0);
 }
+
+export interface GraphNode {
+  path: string;
+  language: string | null;
+  loc: number;
+  /** จำนวนไฟล์ที่พึ่งพาไฟล์นี้ */
+  dependents: number;
+  /** จำนวนไฟล์ที่ไฟล์นี้พึ่งพา */
+  dependencies: number;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: { src: string; dst: string; confidence: number }[];
+  /** true เมื่อ repo ใหญ่เกินขีดจำกัด จึงส่งมาเฉพาะไฟล์ที่สำคัญที่สุด */
+  truncated: boolean;
+  totalNodes: number;
+}
+
+/**
+ * ข้อมูลสำหรับวาดกราฟ
+ *
+ * repo ใหญ่มีไฟล์เป็นหมื่น การส่งทั้งหมดไปวาดพร้อมกันทำให้เบราว์เซอร์ค้าง
+ * จึงตัดเอาเฉพาะไฟล์ที่มีความสัมพันธ์มากที่สุดตามจำนวนที่กำหนด แล้วบอกผู้ใช้ตรง ๆ ว่าตัดมา
+ * และเก็บเฉพาะเส้นที่ปลายทั้งสองข้างยังอยู่ในชุดที่ส่งไป จะได้ไม่มีเส้นลอยไปหาโหนดที่ไม่มีอยู่
+ */
+export async function getGraph(sql: Db, id: string, limit = 3000): Promise<GraphData> {
+  const capped = Math.min(Math.max(limit, 1), 20_000);
+
+  const totals = await sql<{ count: string }[]>`
+    select count(*)::text as count from files where analysis_id = ${id}
+  `;
+  const totalNodes = Number(totals[0]?.count ?? 0);
+
+  const rows = await sql<
+    {
+      path: string;
+      language: string | null;
+      loc: number;
+      dependents: number;
+      dependencies: string;
+    }[]
+  >`
+    select f.path,
+           f.language,
+           f.loc,
+           f.dependents,
+           (select count(*) from edges e where e.analysis_id = f.analysis_id and e.src = f.path)::text
+             as dependencies
+    from files f
+    where f.analysis_id = ${id}
+    order by f.dependents desc, f.loc desc, f.path asc
+    limit ${capped}
+  `;
+
+  const nodes: GraphNode[] = rows.map((row) => ({
+    path: row.path,
+    language: row.language,
+    loc: row.loc,
+    dependents: row.dependents,
+    dependencies: Number(row.dependencies),
+  }));
+
+  const visible = new Set(nodes.map((node) => node.path));
+  const allEdges = await sql<{ src: string; dst: string; confidence: number }[]>`
+    select src, dst, confidence from edges where analysis_id = ${id}
+  `;
+
+  const edges = allEdges
+    .filter((edge) => visible.has(edge.src) && visible.has(edge.dst))
+    .map((edge) => ({ src: edge.src, dst: edge.dst, confidence: Number(edge.confidence) }));
+
+  return { nodes, edges, truncated: totalNodes > nodes.length, totalNodes };
+}
+
+export interface SymbolRow {
+  name: string;
+  kind: string;
+  line: number;
+}
+
+/** ฟังก์ชันและคลาสในไฟล์เดียว เรียงตามลำดับที่ปรากฏในไฟล์ */
+export async function getSymbols(sql: Db, id: string, path: string): Promise<SymbolRow[]> {
+  return sql<SymbolRow[]>`
+    select name, kind, line
+    from symbols
+    where analysis_id = ${id} and path = ${path}
+    order by line asc
+    limit 500
+  `;
+}
+
+/** ไฟล์ที่พึ่งพาไฟล์นี้ และไฟล์ที่ไฟล์นี้พึ่งพา — ใช้ในแผงรายละเอียด */
+export async function getNeighbours(
+  sql: Db,
+  id: string,
+  path: string,
+): Promise<{ dependents: string[]; dependencies: string[] }> {
+  const [incoming, outgoing] = await Promise.all([
+    sql<{ src: string }[]>`
+      select distinct src from edges where analysis_id = ${id} and dst = ${path} order by src limit 200
+    `,
+    sql<{ dst: string }[]>`
+      select distinct dst from edges where analysis_id = ${id} and src = ${path} order by dst limit 200
+    `,
+  ]);
+
+  return {
+    dependents: incoming.map((row) => row.src),
+    dependencies: outgoing.map((row) => row.dst),
+  };
+}

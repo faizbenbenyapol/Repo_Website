@@ -9,6 +9,9 @@ import {
   getAnalysis,
   getEdges,
   getFiles,
+  getGraph,
+  getNeighbours,
+  getSymbols,
 } from '@repolens/db';
 import { config } from '../config.js';
 import type { Services } from '../services.js';
@@ -124,6 +127,32 @@ export function analysisRoutes(services: Services) {
       });
 
       return { files };
+    });
+
+    app.get('/api/analyses/:id/graph', async (request, reply) => {
+      const params = idParam.safeParse(request.params);
+      if (!params.success) return reply.status(400).send({ error: 'รหัสงานวิเคราะห์ไม่ถูกต้อง' });
+
+      const query = z
+        .object({ limit: z.coerce.number().int().positive().max(20_000).optional() })
+        .parse(request.query ?? {});
+
+      return getGraph(services.sql, params.data.id, query.limit);
+    });
+
+    app.get('/api/analyses/:id/files/detail', async (request, reply) => {
+      const params = idParam.safeParse(request.params);
+      if (!params.success) return reply.status(400).send({ error: 'รหัสงานวิเคราะห์ไม่ถูกต้อง' });
+
+      const query = z.object({ path: z.string().min(1).max(1000) }).safeParse(request.query ?? {});
+      if (!query.success) return reply.status(400).send({ error: 'ต้องระบุพาธของไฟล์' });
+
+      const [symbols, neighbours] = await Promise.all([
+        getSymbols(services.sql, params.data.id, query.data.path),
+        getNeighbours(services.sql, params.data.id, query.data.path),
+      ]);
+
+      return { path: query.data.path, symbols, ...neighbours };
     });
 
     app.get('/api/analyses/:id/edges', async (request, reply) => {

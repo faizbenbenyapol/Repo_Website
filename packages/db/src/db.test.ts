@@ -8,6 +8,9 @@ import {
   getAnalysis,
   getEdges,
   getFiles,
+  getGraph,
+  getNeighbours,
+  getSymbols,
   markFailed,
   runMigrations,
   saveResult,
@@ -220,5 +223,89 @@ describe('แคชตามคอมมิต', () => {
   it('ไม่คืนผลของ repo อื่น', async () => {
     const other = { ...ref, name: 'ไม่มีอยู่จริง' };
     expect(await findCachedAnalysis(sql, other, 1)).toBeNull();
+  });
+});
+
+describe('ข้อมูลสำหรับวาดกราฟ', () => {
+  async function seed(): Promise<string> {
+    const id = await createAnalysis(sql, {
+      ref,
+      requestedInput: 'x',
+      analyzerSchema: 1,
+      appVersion: '0.3.0',
+    });
+    await saveResult(sql, id, makeResult());
+    return id;
+  }
+
+  it('ส่งโหนดพร้อมจำนวนขาเข้าและขาออกของแต่ละไฟล์', async () => {
+    const graph = await getGraph(sql, await seed());
+
+    expect(graph.nodes).toHaveLength(3);
+    expect(graph.truncated).toBe(false);
+    expect(graph.totalNodes).toBe(3);
+
+    const target = graph.nodes.find((node) => node.path === 'src/util.ts');
+    expect(target?.dependents).toBe(1);
+    expect(target?.dependencies).toBe(0);
+
+    const source = graph.nodes.find((node) => node.path === 'src/index.ts');
+    expect(source?.dependencies).toBe(1);
+    expect(source?.dependents).toBe(0);
+  });
+
+  it('เรียงไฟล์ที่ถูกพึ่งพามากที่สุดมาก่อน เพราะเป็นชุดที่ตัดเหลือเมื่อ repo ใหญ่', async () => {
+    const graph = await getGraph(sql, await seed(), 1);
+
+    expect(graph.nodes).toHaveLength(1);
+    expect(graph.nodes[0]?.path).toBe('src/util.ts');
+    expect(graph.truncated).toBe(true);
+    expect(graph.totalNodes).toBe(3);
+  });
+
+  it('ตัดเส้นที่ปลายอีกข้างไม่ได้ถูกส่งไปด้วย จะได้ไม่มีเส้นลอย', async () => {
+    const graph = await getGraph(sql, await seed(), 1);
+    expect(graph.edges).toHaveLength(0);
+  });
+
+  it('ส่งเส้นครบเมื่อไม่ได้ตัดโหนด', async () => {
+    const graph = await getGraph(sql, await seed());
+    expect(graph.edges).toEqual([
+      { src: 'src/index.ts', dst: 'src/util.ts', confidence: expect.closeTo(0.9, 5) },
+    ]);
+  });
+});
+
+describe('รายละเอียดของไฟล์เดียว', () => {
+  it('บอกฟังก์ชันในไฟล์ และไฟล์ที่เกี่ยวข้องทั้งสองทิศทาง', async () => {
+    const id = await createAnalysis(sql, {
+      ref,
+      requestedInput: 'x',
+      analyzerSchema: 1,
+      appVersion: '0.3.0',
+    });
+    await saveResult(sql, id, makeResult());
+
+    const symbols = await getSymbols(sql, id, 'src/index.ts');
+    expect(symbols).toEqual([{ name: 'main', kind: 'function', line: 3 }]);
+
+    const from = await getNeighbours(sql, id, 'src/index.ts');
+    expect(from.dependencies).toEqual(['src/util.ts']);
+    expect(from.dependents).toEqual([]);
+
+    const to = await getNeighbours(sql, id, 'src/util.ts');
+    expect(to.dependents).toEqual(['src/index.ts']);
+    expect(to.dependencies).toEqual([]);
+  });
+
+  it('ไฟล์ที่ไม่มี symbol คืนรายการว่าง ไม่ใช่ error', async () => {
+    const id = await createAnalysis(sql, {
+      ref,
+      requestedInput: 'x',
+      analyzerSchema: 1,
+      appVersion: '0.3.0',
+    });
+    await saveResult(sql, id, makeResult());
+    expect(await getSymbols(sql, id, 'logo.bin')).toEqual([]);
   });
 });

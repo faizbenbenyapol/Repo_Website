@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen">
         <header className="border-b border-line">
-          <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
+          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
             <a href="/" className="font-display text-lg font-semibold tracking-tight">
               RepoLens
             </a>
@@ -41,10 +41,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </header>
 
-        <main className="mx-auto max-w-5xl px-6 pb-20">{children}</main>
+        <main className="mx-auto max-w-6xl px-6 pb-20">{children}</main>
 
         <footer className="border-t border-line">
-          <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-6 py-6">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-6">
             <p className="font-mono text-xs text-faint">repo.benyapol.com</p>
             <VersionChip />
           </div>

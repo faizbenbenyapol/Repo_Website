@@ -4,7 +4,7 @@ import { expect, test } from '@playwright/test';
  * ทดสอบไปป์ไลน์จริงทั้งเส้น: สั่งงาน → worker โคลน → อ่านโครงสร้าง → เก็บผล → หน้าเว็บแสดง
  * ใช้ repo ตัวอย่างที่ compose เตรียมไว้ในเครื่อง จึงไม่พึ่งเครือข่ายและได้ผลเหมือนกันทุกครั้ง
  */
-test('สั่งวิเคราะห์แล้วได้หน้าผลลัพธ์ที่มีข้อมูลจริง', async ({ page, request }) => {
+test('สั่งวิเคราะห์แล้วได้แผนที่โค้ดที่มีข้อมูลจริง', async ({ page, request }) => {
   const created = await request.post('/api/analyses', {
     data: { input: '/fixtures/demo', refresh: true },
   });
@@ -17,8 +17,68 @@ test('สั่งวิเคราะห์แล้วได้หน้า�
   // สิ่งที่ต้องเป็นจริงเสมอคือสุดท้ายผู้ใช้ต้องไปถึงหน้าผลลัพธ์เอง โดยไม่ต้องกดอะไร
   await expect(page).toHaveURL(new RegExp(`/a/${id}$`), { timeout: 90_000 });
 
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('demo');
+  await expect(page.getByText(/แสดง \d+ ไฟล์/)).toBeVisible();
+  await expect(page.getByLabel('ค้นหาไฟล์')).toBeVisible();
+});
+
+test('เลือกไฟล์จากรายการแล้วแผงรายละเอียดบอกทั้งฟังก์ชันและไฟล์ที่เกี่ยวข้อง', async ({
+  page,
+  request,
+}) => {
+  const created = await request.post('/api/analyses', { data: { input: '/fixtures/demo' } });
+  const { id } = await created.json();
+
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/analyses/${id}`);
+        return (await res.json()).analysis.status;
+      },
+      { timeout: 90_000, intervals: [500] },
+    )
+    .toBe('done');
+
+  await page.goto(`/a/${id}`);
+
+  // ก่อนเลือกอะไร แผงขวาต้องบอกว่าต้องทำอะไรต่อ ไม่ใช่ปล่อยว่าง
+  await expect(page.getByText('ยังไม่ได้เลือกไฟล์')).toBeVisible();
+
+  await page.getByLabel('ค้นหาไฟล์').fill('format');
+  await page.getByRole('button', { name: 'format.ts' }).click();
+
+  await expect(page.getByText('ไฟล์ที่เลือก')).toBeVisible();
+  await expect(page.getByText('src/util/format.ts')).toBeVisible();
+  await expect(page.getByText('formatName')).toBeVisible();
+  await expect(page.getByText('ไฟล์ที่พึ่งพาไฟล์นี้')).toBeVisible();
+  await expect(page.getByText('src/greet.ts')).toBeVisible();
+});
+
+test('สลับโหมดสีของกราฟได้ และหน้าสรุปตัวเลขยังเปิดได้จากหน้าแผนที่', async ({ page, request }) => {
+  const created = await request.post('/api/analyses', { data: { input: '/fixtures/demo' } });
+  const { id } = await created.json();
+
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/analyses/${id}`);
+        return (await res.json()).analysis.status;
+      },
+      { timeout: 90_000, intervals: [500] },
+    )
+    .toBe('done');
+
+  await page.goto(`/a/${id}`);
+
+  await page.getByRole('button', { name: 'ภาษา' }).click();
+  await expect(page.getByText('ดูว่าแต่ละส่วนเขียนด้วยภาษาอะไร')).toBeVisible();
+
+  await page.getByRole('button', { name: 'ความสำคัญ' }).click();
+  await expect(page.getByText('ยิ่งเข้ม ยิ่งมีไฟล์อื่นพึ่งพามาก')).toBeVisible();
+
+  await page.getByRole('link', { name: 'สรุปตัวเลขทั้งหมด' }).click();
+  await expect(page).toHaveURL(new RegExp(`/a/${id}/report$`));
   await expect(page.getByText('ไฟล์ทั้งหมด')).toBeVisible();
-  await expect(page.getByText('เส้นเชื่อมระหว่างไฟล์')).toBeVisible();
   await expect(page.getByRole('table')).toContainText('src/util/format.ts');
   await expect(page.getByText('สัดส่วนภาษา')).toBeVisible();
 });

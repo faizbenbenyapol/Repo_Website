@@ -183,3 +183,37 @@ describe('สตรีมความคืบหน้า', () => {
     expect(['queued', 'running']).toContain(payload.status);
   }, 30_000);
 });
+
+describe('ข้อมูลกราฟ', () => {
+  it('รหัสที่ไม่มีอยู่คืนกราฟว่าง ไม่ใช่ error', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/analyses/00000000-0000-4000-8000-000000000000/graph',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ nodes: [], edges: [], truncated: false, totalNodes: 0 });
+  });
+
+  it('ปฏิเสธรหัสที่ผิดรูปแบบ', async () => {
+    const res = await app.inject({ method: 'GET', url: '/api/analyses/ไม่ใช่รหัส/graph' });
+    expect(res.statusCode).toBe(400);
+  });
+
+  it('ต้องระบุพาธเมื่อขอรายละเอียดไฟล์', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/analyses/00000000-0000-4000-8000-000000000000/files/detail',
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error).toContain('พาธ');
+  });
+
+  it('ไฟล์ที่ไม่มีอยู่คืนรายการว่างทั้งสามชุด', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/api/analyses/00000000-0000-4000-8000-000000000000/files/detail?path=src/x.ts',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ symbols: [], dependents: [], dependencies: [] });
+  });
+});
