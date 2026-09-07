@@ -217,3 +217,49 @@ describe('ข้อมูลกราฟ', () => {
     expect(res.json()).toMatchObject({ symbols: [], dependents: [], dependencies: [] });
   });
 });
+
+describe('ตัวชี้วัดและการส่งออก', () => {
+  const missing = '00000000-0000-4000-8000-000000000000';
+
+  it('งานที่ไม่มีอยู่คืนรายการข้อสังเกตว่าง', async () => {
+    const res = await app.inject({ method: 'GET', url: `/api/analyses/${missing}/findings` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().findings).toEqual([]);
+  });
+
+  it('จัดอันดับไฟล์ได้ตามมิติที่ระบุ และปฏิเสธมิติที่ไม่รู้จัก', async () => {
+    for (const by of ['churn', 'blast', 'dependents']) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/api/analyses/${missing}/ranked?by=${by}`,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().files).toEqual([]);
+    }
+
+    const bad = await app.inject({
+      method: 'GET',
+      url: `/api/analyses/${missing}/ranked?by=อะไรก็ไม่รู้`,
+    });
+    expect(bad.statusCode).toBe(500);
+  });
+
+  it('ส่งออกไม่ได้เมื่อยังวิเคราะห์ไม่เสร็จ และบอกเหตุผลเป็นภาษาไทย', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/analyses',
+      payload: { input: 'octocat/hello-world', refresh: true },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/analyses/${created.json().id}/export`,
+    });
+    expect(res.statusCode).toBe(409);
+    expect(res.json().error).toContain('ยังวิเคราะห์ไม่เสร็จ');
+  });
+
+  it('ส่งออกงานที่ไม่มีอยู่ตอบ 404', async () => {
+    const res = await app.inject({ method: 'GET', url: `/api/analyses/${missing}/export` });
+    expect(res.statusCode).toBe(404);
+  });
+});

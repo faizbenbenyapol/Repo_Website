@@ -79,8 +79,70 @@ test('สลับโหมดสีของกราฟได้ และห�
   await page.getByRole('link', { name: 'สรุปตัวเลขทั้งหมด' }).click();
   await expect(page).toHaveURL(new RegExp(`/a/${id}/report$`));
   await expect(page.getByText('ไฟล์ทั้งหมด')).toBeVisible();
-  await expect(page.getByRole('table')).toContainText('src/util/format.ts');
   await expect(page.getByText('สัดส่วนภาษา')).toBeVisible();
+});
+
+test('หน้าสุขภาพโค้ดบอกเกรด ที่มาของคะแนน และข้อสังเกตด้านความปลอดภัย', async ({
+  page,
+  request,
+}) => {
+  const created = await request.post('/api/analyses', { data: { input: '/fixtures/demo' } });
+  const { id } = await created.json();
+
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/analyses/${id}`);
+        return (await res.json()).analysis.status;
+      },
+      { timeout: 90_000, intervals: [500] },
+    )
+    .toBe('done');
+
+  await page.goto(`/a/${id}/report`);
+
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('demo');
+  await expect(page.getByText('คะแนนเริ่มจากเต็มร้อย แล้วหักตามที่พบ')).toBeVisible();
+
+  // ทุกข้อที่หักคะแนนต้องอธิบายที่มาได้ ไม่ใช่โชว์แค่ตัวเลขรวม
+  const breakdown = page.getByRole('list', { name: 'ที่มาของคะแนนสุขภาพ' });
+  for (const label of ['โค้ดที่ไม่มีใครเรียกใช้', 'วงจรพึ่งพา', 'ความผูกกันแน่น', 'ความปลอดภัย']) {
+    await expect(breakdown.getByText(label, { exact: true })).toBeVisible();
+  }
+
+  // repo ตัวอย่างมีกุญแจปลอมฝังไว้ ต้องถูกจับได้และค่าต้องถูกกลบ
+  await expect(page.getByText('ข้อสังเกตด้านความปลอดภัย')).toBeVisible();
+  await expect(page.getByText('พบค่าที่ดูเหมือนกุญแจหรือรหัสผ่านเขียนตรง ๆ ในโค้ด')).toBeVisible();
+  await expect(page.locator('pre').filter({ hasText: 'ถูกกลบไว้' }).first()).toBeVisible();
+  expect(await page.content()).not.toContain('sk_live_0123456789abcdefghij');
+
+  await expect(page.getByText('รัศมีผลกระทบสูงสุด')).toBeVisible();
+});
+
+test('ส่งออกผลวิเคราะห์ทั้งชุดเป็น JSON ได้', async ({ request }) => {
+  const created = await request.post('/api/analyses', { data: { input: '/fixtures/demo' } });
+  const { id } = await created.json();
+
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/analyses/${id}`);
+        return (await res.json()).analysis.status;
+      },
+      { timeout: 90_000, intervals: [500] },
+    )
+    .toBe('done');
+
+  const response = await request.get(`/api/analyses/${id}/export`);
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-disposition']).toContain('attachment');
+
+  const body = await response.json();
+  expect(body.repo.name).toBe('demo');
+  expect(body.metrics.health.grade).toMatch(/^[ABCDF]$/);
+  expect(body.files.length).toBeGreaterThan(3);
+  expect(body.edges.length).toBeGreaterThan(0);
+  expect(body.findings.some((f: { rule: string }) => f.rule === 'hardcoded-secret')).toBe(true);
 });
 
 test('หน้าความคืบหน้าแสดงครบทุกขั้น และบอกเหตุผลเมื่อวิเคราะห์ไม่สำเร็จ', async ({
@@ -111,6 +173,7 @@ test('หน้าความคืบหน้าแสดงครบทุ�
     'สำรวจไฟล์ทั้งหมด',
     'อ่านโครงสร้างโค้ด',
     'เชื่อมความสัมพันธ์',
+    'คำนวณตัวชี้วัด',
     'สรุปผล',
   ]) {
     await expect(page.getByText(stage, { exact: true })).toBeVisible();

@@ -4,6 +4,7 @@ export interface GraphNode {
   loc: number;
   dependents: number;
   dependencies: number;
+  blast: number;
 }
 
 export interface GraphEdge {
@@ -24,6 +25,9 @@ export interface FileDetail {
   symbols: { name: string; kind: string; line: number }[];
   dependents: string[];
   dependencies: string[];
+  churn: number;
+  blast: number;
+  authors: { name: string; commits: number }[];
 }
 
 /** โหมดการลงสีของกราฟ — เปลี่ยนคำถามที่ภาพเดียวกันตอบได้ */
@@ -31,6 +35,7 @@ export const COLOR_MODES = [
   { id: 'folder', label: 'โฟลเดอร์', hint: 'ดูว่าโปรเจกต์ถูกแบ่งเป็นส่วนไหนบ้าง' },
   { id: 'language', label: 'ภาษา', hint: 'ดูว่าแต่ละส่วนเขียนด้วยภาษาอะไร' },
   { id: 'dependents', label: 'ความสำคัญ', hint: 'ยิ่งเข้ม ยิ่งมีไฟล์อื่นพึ่งพามาก' },
+  { id: 'blast', label: 'รัศมีผลกระทบ', hint: 'ยิ่งเข้ม ยิ่งกระทบไฟล์อื่นกว้างเมื่อแก้' },
 ] as const;
 
 export type ColorMode = (typeof COLOR_MODES)[number]['id'];
@@ -73,8 +78,14 @@ function heat(value: number, max: number): string {
   return `hsl(220 ${saturation.toFixed(0)}% ${lightness.toFixed(0)}%)`;
 }
 
-export function colorFor(node: GraphNode, mode: ColorMode, maxDependents: number): string {
+export function colorFor(
+  node: GraphNode,
+  mode: ColorMode,
+  maxDependents: number,
+  maxBlast = maxDependents,
+): string {
   if (mode === 'dependents') return heat(node.dependents, maxDependents);
+  if (mode === 'blast') return heat(node.blast, maxBlast);
   const key = mode === 'language' ? (node.language ?? '') : topFolder(node.path);
   if (!key) return NEUTRAL;
   return PALETTE[hash(key) % PALETTE.length] ?? NEUTRAL;
@@ -93,7 +104,7 @@ export interface LegendEntry {
 
 /** คำอธิบายสีที่แสดงข้างกราฟ — เอาเฉพาะกลุ่มใหญ่สุด เพื่อไม่ให้กลายเป็นรายการยาวจนไม่มีใครอ่าน */
 export function legendFor(nodes: GraphNode[], mode: ColorMode, limit = 8): LegendEntry[] {
-  if (mode === 'dependents') return [];
+  if (mode === 'dependents' || mode === 'blast') return [];
 
   const maxDependents = nodes.reduce((max, node) => Math.max(max, node.dependents), 0);
   const groups = new Map<string, { count: number; color: string }>();

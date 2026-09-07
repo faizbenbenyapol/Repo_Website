@@ -8,8 +8,11 @@ import {
   getAnalysis,
   getEdges,
   getFiles,
+  getFileInsight,
+  getFindings,
   getGraph,
   getNeighbours,
+  getRankedFiles,
   getSymbols,
   markFailed,
   runMigrations,
@@ -74,6 +77,39 @@ function makeResult(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
     external: [{ specifier: 'react', count: 3 }],
     unresolved: 0,
     symbols: [{ path: 'src/index.ts', name: 'main', kind: 'function', line: 3 }],
+    insights: new Map([
+      [
+        'src/index.ts',
+        { churn: 3, authors: [{ name: 'สมชาย', commits: 3 }], lastCommitAt: null, blast: 0 },
+      ],
+      [
+        'src/util.ts',
+        { churn: 9, authors: [{ name: 'สมหญิง', commits: 9 }], lastCommitAt: null, blast: 1 },
+      ],
+    ]),
+    metrics: {
+      health: {
+        score: 84,
+        grade: 'B' as const,
+        breakdown: [
+          { id: 'dead-code', label: 'โค้ดที่ไม่มีใครเรียกใช้', penalty: 16, detail: 'ทดสอบ' },
+        ],
+      },
+      cycles: [],
+      deadFiles: ['src/ลืมลบ.ts'],
+      hotspots: [{ path: 'src/util.ts', churn: 9, loc: 4, dependents: 1, risk: 12.5 }],
+      coupling: { averageDependencies: 0.5, highFanOut: [] },
+    },
+    findings: [
+      {
+        path: 'src/index.ts',
+        line: 2,
+        rule: 'hardcoded-secret',
+        severity: 'high' as const,
+        message: 'พบค่าที่ดูเหมือนกุญแจหรือรหัสผ่านเขียนตรง ๆ ในโค้ด',
+        snippet: 'const key = "…ถูกกลบไว้…";',
+      },
+    ],
     engines: { treeSitter: 2, pattern: 0 },
     warnings: [],
     durationMs: 1234,
@@ -307,5 +343,65 @@ describe('รายละเอียดของไฟล์เดียว', (
     });
     await saveResult(sql, id, makeResult());
     expect(await getSymbols(sql, id, 'logo.bin')).toEqual([]);
+  });
+});
+
+describe('ตัวชี้วัดของ v0.4.0', () => {
+  async function seedMetrics(): Promise<string> {
+    const id = await createAnalysis(sql, {
+      ref,
+      requestedInput: 'x',
+      analyzerSchema: 1,
+      appVersion: '0.4.0',
+    });
+    await saveResult(sql, id, makeResult());
+    return id;
+  }
+
+  it('เก็บคะแนนสุขภาพและรายละเอียดการหักคะแนนไว้กับงานวิเคราะห์', async () => {
+    const row = await getAnalysis(sql, await seedMetrics());
+    expect(row?.metrics?.health.grade).toBe('B');
+    expect(row?.metrics?.health.score).toBe(84);
+    expect(row?.metrics?.deadFiles).toEqual(['src/ลืมลบ.ts']);
+  });
+
+  it('เก็บข้อสังเกตด้านความปลอดภัยโดยที่ค่าความลับถูกกลบมาแล้ว', async () => {
+    const findings = await getFindings(sql, await seedMetrics());
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.severity).toBe('high');
+    expect(findings[0]?.snippet).toContain('ถูกกลบไว้');
+  });
+
+  it('บันทึกซ้ำแล้วข้อสังเกตเก่าไม่ค้าง', async () => {
+    const id = await seedMetrics();
+    await saveResult(sql, id, makeResult({ findings: [] }));
+    expect(await getFindings(sql, id)).toHaveLength(0);
+  });
+
+  it('เก็บจำนวนครั้งที่แก้ รัศมีผลกระทบ และเจ้าของโค้ดไว้กับไฟล์', async () => {
+    const id = await seedMetrics();
+    const insight = await getFileInsight(sql, id, 'src/util.ts');
+    expect(insight?.churn).toBe(9);
+    expect(insight?.blast).toBe(1);
+    expect(insight?.authors[0]?.name).toBe('สมหญิง');
+  });
+
+  it('จัดอันดับไฟล์ได้ทั้งตามความถี่ที่แก้ และตามรัศมีผลกระทบ', async () => {
+    const id = await seedMetrics();
+
+    const byChurn = await getRankedFiles(sql, id, 'churn');
+    expect(byChurn[0]?.path).toBe('src/util.ts');
+    expect(byChurn[0]?.churn).toBe(9);
+
+    const byBlast = await getRankedFiles(sql, id, 'blast');
+    expect(byBlast[0]?.path).toBe('src/util.ts');
+
+    const byDependents = await getRankedFiles(sql, id, 'dependents');
+    expect(byDependents[0]?.path).toBe('src/util.ts');
+  });
+
+  it('กราฟส่งรัศมีผลกระทบไปด้วย เพื่อใช้ลงสีได้โดยไม่ต้องยิงเพิ่ม', async () => {
+    const graph = await getGraph(sql, await seedMetrics());
+    expect(graph.nodes.find((node) => node.path === 'src/util.ts')?.blast).toBe(1);
   });
 });

@@ -47,6 +47,7 @@ def start():
     return path
 `,
   'docs/readme.md': '# เอกสาร\n\nไฟล์นี้ไม่ใช่โค้ด แต่ต้องถูกนับ\n',
+  'src/config.ts': 'export const apiKey = "sk_live_0123456789abcdefghij";\n',
   'node_modules/skipped/index.js': 'module.exports = 1;\n',
   'dist/bundle.js': 'console.log(1);\n',
 };
@@ -126,6 +127,7 @@ describe('ไปป์ไลน์ทั้งหมดบน repo จริง'
       'inventory',
       'parse',
       'link',
+      'metrics',
       'publish',
     ]);
     expect(stages.at(-1)?.percent).toBe(100);
@@ -164,6 +166,35 @@ describe('ไปป์ไลน์ทั้งหมดบน repo จริง'
     const result = await analyzeRepo(repoDir, { allowLocal: true });
     expect(result.engines.treeSitter).toBeGreaterThan(0);
     expect(result.warnings).toEqual([]);
+  }, 60_000);
+
+  it('คำนวณตัวชี้วัดจาก repo จริงได้ครบชุด', async () => {
+    const result = await analyzeRepo(repoDir, { allowLocal: true });
+
+    expect(['A', 'B', 'C', 'D', 'F']).toContain(result.metrics.health.grade);
+    expect(result.metrics.health.breakdown).toHaveLength(4);
+    expect(result.metrics.coupling.averageDependencies).toBeGreaterThan(0);
+
+    // ไฟล์ที่ทุกคนเรียกใช้ต้องมีรัศมีผลกระทบกว้างที่สุด
+    const format = result.insights.get('src/util/format.ts');
+    expect(format?.blast).toBeGreaterThanOrEqual(2);
+
+    // ประวัติต้องอ่านได้ และรู้ว่าใครแตะไฟล์นี้
+    expect(format?.churn).toBeGreaterThan(0);
+    expect(format?.authors[0]?.name).toBe('ทดสอบ');
+    expect(format?.lastCommitAt).toMatch(/^\d{4}-\d{2}-\d{2}/);
+  }, 60_000);
+
+  it('สแกนความปลอดภัยระหว่างอ่านไฟล์ และกลบค่าที่เป็นความลับ', async () => {
+    const result = await analyzeRepo(repoDir, { allowLocal: true });
+    const leak = result.findings.find((finding) => finding.rule === 'hardcoded-secret');
+
+    expect(leak?.path).toBe('src/config.ts');
+    expect(leak?.severity).toBe('high');
+    expect(leak?.snippet).not.toContain('sk_live_0123456789abcdefghij');
+    expect(
+      result.metrics.health.breakdown.find((item) => item.id === 'security')?.penalty,
+    ).toBeGreaterThan(0);
   }, 60_000);
 
   it('ปฏิเสธที่อยู่ที่ไม่อนุญาตก่อนจะโคลนอะไรทั้งนั้น', async () => {

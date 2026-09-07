@@ -55,6 +55,7 @@ export function DependencyGraph({ data, selected, onSelect, colorMode, visible }
 
     const graph = new Graph({ type: 'directed', multi: false });
     const maxDependents = data.nodes.reduce((max, node) => Math.max(max, node.dependents), 0);
+    const maxBlast = data.nodes.reduce((max, node) => Math.max(max, node.blast), 0);
     const count = Math.max(data.nodes.length, 1);
 
     data.nodes.forEach((node, index) => {
@@ -65,7 +66,7 @@ export function DependencyGraph({ data, selected, onSelect, colorMode, visible }
         x: Math.cos(angle) * (1 + (index % 7) / 7),
         y: Math.sin(angle) * (1 + (index % 5) / 5),
         size: sizeFor(node),
-        color: colorFor(node, colorMode, maxDependents),
+        color: colorFor(node, colorMode, maxDependents, maxBlast),
       });
     });
 

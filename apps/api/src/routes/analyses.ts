@@ -9,8 +9,11 @@ import {
   getAnalysis,
   getEdges,
   getFiles,
+  getFileInsight,
+  getFindings,
   getGraph,
   getNeighbours,
+  getRankedFiles,
   getSymbols,
 } from '@repolens/db';
 import { config } from '../config.js';
@@ -147,12 +150,84 @@ export function analysisRoutes(services: Services) {
       const query = z.object({ path: z.string().min(1).max(1000) }).safeParse(request.query ?? {});
       if (!query.success) return reply.status(400).send({ error: 'ต้องระบุพาธของไฟล์' });
 
-      const [symbols, neighbours] = await Promise.all([
+      const [symbols, neighbours, insight] = await Promise.all([
         getSymbols(services.sql, params.data.id, query.data.path),
         getNeighbours(services.sql, params.data.id, query.data.path),
+        getFileInsight(services.sql, params.data.id, query.data.path),
       ]);
 
-      return { path: query.data.path, symbols, ...neighbours };
+      return {
+        path: query.data.path,
+        symbols,
+        ...neighbours,
+        churn: insight?.churn ?? 0,
+        blast: insight?.blast ?? 0,
+        authors: insight?.authors ?? [],
+      };
+    });
+
+    app.get('/api/analyses/:id/findings', async (request, reply) => {
+      const params = idParam.safeParse(request.params);
+      if (!params.success) return reply.status(400).send({ error: 'รหัสงานวิเคราะห์ไม่ถูกต้อง' });
+      return { findings: await getFindings(services.sql, params.data.id) };
+    });
+
+    app.get('/api/analyses/:id/ranked', async (request, reply) => {
+      const params = idParam.safeParse(request.params);
+      if (!params.success) return reply.status(400).send({ error: 'รหัสงานวิเคราะห์ไม่ถูกต้อง' });
+
+      const query = z
+        .object({
+          by: z.enum(['churn', 'blast', 'dependents']).default('dependents'),
+          limit: z.coerce.number().int().positive().max(200).optional(),
+        })
+        .parse(request.query ?? {});
+
+      return { files: await getRankedFiles(services.sql, params.data.id, query.by, query.limit) };
+    });
+
+    /**
+     * ส่งออกผลวิเคราะห์ทั้งชุดเป็นไฟล์เดียว
+     * ให้เอาไปต่อยอดในเครื่องมืออื่นหรือใน CI ของผู้ใช้เองได้ โดยไม่ต้องยิงหลายเส้นทางมาประกอบเอง
+     */
+    app.get('/api/analyses/:id/export', async (request, reply) => {
+      const params = idParam.safeParse(request.params);
+      if (!params.success) return reply.status(400).send({ error: 'รหัสงานวิเคราะห์ไม่ถูกต้อง' });
+
+      const analysis = await getAnalysis(services.sql, params.data.id);
+      if (!analysis) return reply.status(404).send({ error: 'ไม่พบงานวิเคราะห์นี้' });
+      if (analysis.status !== 'done') {
+        return reply.status(409).send({ error: 'งานนี้ยังวิเคราะห์ไม่เสร็จ จึงยังส่งออกไม่ได้' });
+      }
+
+      const [files, edges, findings] = await Promise.all([
+        getFiles(services.sql, params.data.id, { limit: 5000 }),
+        getEdges(services.sql, params.data.id),
+        getFindings(services.sql, params.data.id, 500),
+      ]);
+
+      return reply
+        .header(
+          'content-disposition',
+          `attachment; filename="repolens-${analysis.owner}-${analysis.name}-${analysis.commitSha?.slice(0, 7)}.json"`,
+        )
+        .send({
+          schema: ANALYZER_SCHEMA,
+          exportedAt: new Date().toISOString(),
+          repo: {
+            host: analysis.host,
+            owner: analysis.owner,
+            name: analysis.name,
+            branch: analysis.branch,
+            commitSha: analysis.commitSha,
+          },
+          totals: analysis.totals,
+          metrics: analysis.metrics,
+          external: analysis.external,
+          files,
+          edges,
+          findings,
+        });
     });
 
     app.get('/api/analyses/:id/edges', async (request, reply) => {

@@ -2,12 +2,23 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { cloneRepo, type CloneOptions } from './clone.js';
 import { buildGraph, type Edge, type ExternalDependency } from './graph.js';
+import { churnMap, readHistory, type FileHistory } from './history.js';
 import { takeInventory, type FileEntry, type InventoryResult } from './inventory.js';
+import { blastRadius, computeMetrics, type Metrics } from './metrics.js';
 import { parseSource, treeSitterFailure, type RawImport, type SymbolInfo } from './parse/index.js';
 import { parseRepoRef, type RepoRef } from './repo-ref.js';
+import { scanFile, summarize, type Finding } from './security.js';
 
 /** ขั้นตอนที่ผู้ใช้เห็นบนหน้าจอระหว่างรอ ตรงกับที่ทำจริงในโค้ดนี้ */
-export const STAGES = ['resolve', 'fetch', 'inventory', 'parse', 'link', 'publish'] as const;
+export const STAGES = [
+  'resolve',
+  'fetch',
+  'inventory',
+  'parse',
+  'link',
+  'metrics',
+  'publish',
+] as const;
 export type Stage = (typeof STAGES)[number];
 
 export const STAGE_LABELS: Record<Stage, string> = {
@@ -16,6 +27,7 @@ export const STAGE_LABELS: Record<Stage, string> = {
   inventory: 'สำรวจไฟล์ทั้งหมด',
   parse: 'อ่านโครงสร้างโค้ด',
   link: 'เชื่อมความสัมพันธ์',
+  metrics: 'คำนวณตัวชี้วัด',
   publish: 'สรุปผล',
 };
 
@@ -30,16 +42,28 @@ export interface FileSymbol extends SymbolInfo {
   path: string;
 }
 
+/** ข้อมูลรายไฟล์ที่เพิ่มขึ้นมาจากประวัติและกราฟ */
+export interface FileInsight {
+  churn: number;
+  authors: FileHistory['authors'];
+  lastCommitAt: string | null;
+  /** จำนวนไฟล์ที่ได้รับผลกระทบถ้าไฟล์นี้เปลี่ยน */
+  blast: number;
+}
+
 export interface AnalysisResult {
   ref: RepoRef;
   commitSha: string;
   branch: string;
   files: FileEntry[];
+  insights: Map<string, FileInsight>;
   totals: InventoryResult['totals'];
   edges: Edge[];
   external: ExternalDependency[];
   unresolved: number;
   symbols: FileSymbol[];
+  metrics: Metrics;
+  findings: Finding[];
   engines: { treeSitter: number; pattern: number };
   warnings: string[];
   durationMs: number;
@@ -51,16 +75,18 @@ export interface AnalyzeOptions extends CloneOptions {
   maxFiles?: number;
   /** จำนวน symbol สูงสุดที่เก็บต่อไฟล์ กันไฟล์ที่ถูกสร้างอัตโนมัติทำให้ผลบวม */
   maxSymbolsPerFile?: number;
+  maxCommits?: number;
   concurrency?: number;
   onProgress?: (event: ProgressEvent) => void;
 }
 
 const STAGE_PERCENT: Record<Stage, number> = {
   resolve: 5,
-  fetch: 25,
-  inventory: 40,
-  parse: 80,
-  link: 95,
+  fetch: 20,
+  inventory: 35,
+  parse: 70,
+  link: 82,
+  metrics: 94,
   publish: 100,
 };
 
@@ -97,7 +123,7 @@ async function mapWithLimit<T, R>(
 }
 
 /**
- * ไปป์ไลน์เต็มของ v0.2.0: ตรวจที่อยู่ → โคลน → สำรวจไฟล์ → อ่านโครงสร้าง → เชื่อมความสัมพันธ์
+ * ไปป์ไลน์เต็ม: ตรวจที่อยู่ → โคลน → สำรวจไฟล์ → อ่านโครงสร้าง → เชื่อมความสัมพันธ์ → คำนวณตัวชี้วัด
  * ทุกขั้นรายงานความคืบหน้าออกไป เพื่อให้ผู้ใช้เห็นว่าระบบกำลังทำอะไรอยู่จริง ๆ ไม่ใช่แถบหลอก
  */
 export async function analyzeRepo(
@@ -116,7 +142,8 @@ export async function analyzeRepo(
   const ref = parsed.ref;
 
   report('fetch', `${STAGE_LABELS.fetch} — ${ref.owner}/${ref.name}`);
-  const clone = await cloneRepo(ref, options);
+  // ดึงประวัติมาพอสมควร เพราะจุดร้อนกับเจ้าของโค้ดต้องใช้คอมมิตย้อนหลัง ไม่ใช่แค่คอมมิตล่าสุด
+  const clone = await cloneRepo(ref, { depth: options.depth ?? 200, ...options });
 
   try {
     report('inventory', STAGE_LABELS.inventory);
@@ -125,18 +152,25 @@ export async function analyzeRepo(
       maxFiles: options.maxFiles,
     });
 
-    const parsable = inventory.files.filter((file) => file.parsed && file.language);
-    report('parse', `${STAGE_LABELS.parse} — ${parsable.length} ไฟล์`);
+    const readable = inventory.files.filter((file) => file.hash !== '' && file.loc > 0);
+    report('parse', `${STAGE_LABELS.parse} — ${readable.length} ไฟล์`);
 
     const imports = new Map<string, RawImport[]>();
     const symbols: FileSymbol[] = [];
+    const findings: Finding[] = [];
     const maxSymbols = options.maxSymbolsPerFile ?? 300;
     const engines = { treeSitter: 0, pattern: 0 };
 
-    await mapWithLimit(parsable, options.concurrency ?? 8, async (file) => {
+    await mapWithLimit(readable, options.concurrency ?? 8, async (file) => {
       const source = await readFile(join(clone.dir, file.path), 'utf8');
-      const result = await parseSource(source, file.language as string);
 
+      // สแกนความปลอดภัยกับทุกไฟล์ที่อ่านเป็นข้อความได้ ไม่ใช่เฉพาะไฟล์โค้ด
+      // เพราะกุญแจที่หลุดบ่อยที่สุดอยู่ในไฟล์ตั้งค่าและไฟล์สภาพแวดล้อม
+      findings.push(...scanFile({ path: file.path, language: file.language, source }));
+
+      if (!file.parsed || !file.language) return;
+
+      const result = await parseSource(source, file.language);
       if (result.engine === 'tree-sitter') engines.treeSitter += 1;
       else engines.pattern += 1;
 
@@ -147,7 +181,7 @@ export async function analyzeRepo(
     });
 
     const failure = treeSitterFailure();
-    if (failure && engines.treeSitter === 0 && parsable.length > 0) {
+    if (failure && engines.treeSitter === 0 && inventory.totals.parsed > 0) {
       warnings.push(`tree-sitter ใช้ไม่ได้ (${failure}) จึงใช้ตัวแยกโค้ดสำรองแทนทั้งหมด`);
     }
 
@@ -157,6 +191,39 @@ export async function analyzeRepo(
       imports,
       goModule: await readGoModule(clone.dir),
     });
+
+    report('metrics', STAGE_LABELS.metrics);
+    const history = await readHistory(clone.dir, { maxCommits: options.maxCommits });
+    if (history.commitsRead === 0) {
+      warnings.push('อ่านประวัติการแก้ไขไม่ได้ จุดร้อนและเจ้าของโค้ดจึงยังว่างอยู่');
+    }
+
+    const churn = churnMap(history);
+    const blast = blastRadius(graph.edges);
+    const security = summarize(findings);
+
+    const metrics = computeMetrics({
+      files: inventory.files,
+      edges: graph.edges,
+      churn,
+      securityPenalty: security.penalty,
+      findingCounts: security.counts,
+    });
+
+    const insights = new Map(
+      inventory.files.map((file) => {
+        const entry = history.files.get(file.path);
+        return [
+          file.path,
+          {
+            churn: entry?.commits ?? 0,
+            authors: entry?.authors ?? [],
+            lastCommitAt: entry?.lastCommitAt ?? null,
+            blast: blast.get(file.path) ?? 0,
+          },
+        ];
+      }),
+    );
 
     if (inventory.totals.files >= (options.maxFiles ?? 50_000)) {
       warnings.push('repo นี้ใหญ่เกินขีดจำกัด จึงวิเคราะห์เฉพาะไฟล์ชุดแรกเท่านั้น');
@@ -169,11 +236,14 @@ export async function analyzeRepo(
       commitSha: clone.commitSha,
       branch: clone.branch,
       files: inventory.files,
+      insights,
       totals: inventory.totals,
       edges: graph.edges,
       external: graph.external,
       unresolved: graph.unresolved,
       symbols,
+      metrics,
+      findings,
       engines,
       warnings,
       durationMs: Date.now() - startedAt,

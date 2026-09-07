@@ -15,6 +15,11 @@
   --color-brass: #8a6712;
   --color-brass-soft: #f0e6cf;
 
+  /* สีเชิงความหมาย แยกจากสีเน้น เพราะบอกสถานะของข้อมูล ไม่ใช่สิ่งที่ผู้ใช้เลือกอยู่ */
+  --color-good: #1c7a50;
+  --color-warn: #9a6706;
+  --color-crit: #af3728;
+
   --font-display: 'Bai Jamjuree', 'IBM Plex Sans Thai', system-ui, sans-serif;
   --font-sans: 'IBM Plex Sans Thai', 'Noto Sans Thai', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
@@ -39,6 +44,9 @@
     --color-accent-soft: #1b2a4d;
     --color-brass: #d9b463;
     --color-brass-soft: #2c2415;
+    --color-good: #4fbf8b;
+    --color-warn: #e0a94a;
+    --color-crit: #f0796a;
   }
 }
 
@@ -57,6 +65,9 @@
   --color-accent-soft: #1b2a4d;
   --color-brass: #d9b463;
   --color-brass-soft: #2c2415;
+  --color-good: #4fbf8b;
+  --color-warn: #e0a94a;
+  --color-crit: #f0796a;
 }
 
 @layer base {

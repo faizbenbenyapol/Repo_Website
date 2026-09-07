@@ -117,6 +117,16 @@ export function Inspector({ analysisId, node, onSelect }: Props) {
             <dt>พึ่งพา</dt>
             <dd className="text-muted tabular-nums">{node.dependencies}</dd>
           </div>
+          <div className="flex gap-1" title="จำนวนไฟล์ที่ได้รับผลกระทบถ้าแก้ไฟล์นี้ รวมทางอ้อม">
+            <dt>รัศมีผลกระทบ</dt>
+            <dd className="text-muted tabular-nums">{node.blast}</dd>
+          </div>
+          {detail && detail.churn > 0 ? (
+            <div className="flex gap-1" title="จำนวนคอมมิตที่แตะไฟล์นี้ในประวัติที่อ่านมา">
+              <dt>ถูกแก้</dt>
+              <dd className="text-muted tabular-nums">{detail.churn} ครั้ง</dd>
+            </div>
+          ) : null}
         </dl>
       </div>
 
@@ -150,6 +160,25 @@ export function Inspector({ analysisId, node, onSelect }: Props) {
               </ul>
             )}
           </section>
+
+          {detail.authors.length > 0 ? (
+            <section>
+              <p className="label">ควรถามใครเรื่องไฟล์นี้</p>
+              <ul className="mt-2 flex flex-col gap-1">
+                {detail.authors.map((author) => (
+                  <li
+                    key={author.name}
+                    className="flex items-baseline justify-between gap-3 text-sm"
+                  >
+                    <span>{author.name}</span>
+                    <span className="font-mono text-[11px] text-faint tabular-nums">
+                      {author.commits} คอมมิต
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
 
           <PathList
             empty="ยังไม่มีไฟล์ไหนพึ่งพาไฟล์นี้"

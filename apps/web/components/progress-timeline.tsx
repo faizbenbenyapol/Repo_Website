@@ -10,6 +10,7 @@ const STAGES = [
   { id: 'inventory', label: 'สำรวจไฟล์ทั้งหมด' },
   { id: 'parse', label: 'อ่านโครงสร้างโค้ด' },
   { id: 'link', label: 'เชื่อมความสัมพันธ์' },
+  { id: 'metrics', label: 'คำนวณตัวชี้วัด' },
   { id: 'publish', label: 'สรุปผล' },
 ] as const;
 

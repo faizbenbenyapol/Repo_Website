@@ -1,4 +1,4 @@
-import type { AnalysisResult, RepoRef, Stage } from '@repolens/analyzer';
+import type { AnalysisResult, Metrics, RepoRef, Stage } from '@repolens/analyzer';
 import { countDependents } from '@repolens/analyzer';
 import type { Db } from './client.js';
 
@@ -28,6 +28,7 @@ export interface AnalysisRow {
   totals: AnalysisResult['totals'] | null;
   engines: AnalysisResult['engines'] | null;
   external: AnalysisResult['external'] | null;
+  metrics: Metrics | null;
   warnings: string[] | null;
   error: string | null;
   analyzerSchema: number;
@@ -52,6 +53,7 @@ interface AnalysisDbRow {
   totals: AnalysisResult['totals'] | null;
   engines: AnalysisResult['engines'] | null;
   external: AnalysisResult['external'] | null;
+  metrics: Metrics | null;
   warnings: string[] | null;
   error: string | null;
   analyzer_schema: number;
@@ -77,6 +79,7 @@ function toRow(row: AnalysisDbRow): AnalysisRow {
     totals: row.totals,
     engines: row.engines,
     external: row.external,
+    metrics: row.metrics,
     warnings: row.warnings,
     error: row.error,
     analyzerSchema: row.analyzer_schema,
@@ -90,7 +93,7 @@ function toRow(row: AnalysisDbRow): AnalysisRow {
 const SELECT_ANALYSIS = `
   select a.id, a.status, a.stage, a.percent, a.message, a.requested_input,
          r.host, r.owner, r.name,
-         a.commit_sha, a.branch, a.totals, a.engines, a.external, a.warnings,
+         a.commit_sha, a.branch, a.totals, a.engines, a.external, a.metrics, a.warnings,
          a.error, a.analyzer_schema, a.app_version, a.duration_ms,
          a.created_at, a.finished_at
   from analyses a
@@ -162,6 +165,7 @@ export async function saveResult(sql: Db, id: string, result: AnalysisResult): P
     await tx`delete from files where analysis_id = ${id}`;
     await tx`delete from edges where analysis_id = ${id}`;
     await tx`delete from symbols where analysis_id = ${id}`;
+    await tx`delete from findings where analysis_id = ${id}`;
 
     const fileRows = result.files.map((file) => ({
       analysis_id: id,
@@ -173,6 +177,10 @@ export async function saveResult(sql: Db, id: string, result: AnalysisResult): P
       parsed: file.parsed,
       skip_reason: file.skipReason,
       dependents: dependents.get(file.path) ?? 0,
+      churn: result.insights.get(file.path)?.churn ?? 0,
+      blast: result.insights.get(file.path)?.blast ?? 0,
+      authors: tx.json(asJson(result.insights.get(file.path)?.authors ?? [])),
+      last_commit_at: result.insights.get(file.path)?.lastCommitAt ?? null,
     }));
 
     for (let i = 0; i < fileRows.length; i += 500) {
@@ -204,6 +212,20 @@ export async function saveResult(sql: Db, id: string, result: AnalysisResult): P
       await tx`insert into symbols ${tx(symbolRows.slice(i, i + 500))}`;
     }
 
+    const findingRows = result.findings.slice(0, 500).map((finding) => ({
+      analysis_id: id,
+      path: finding.path,
+      line: finding.line,
+      rule: finding.rule,
+      severity: finding.severity,
+      message: finding.message,
+      snippet: finding.snippet,
+    }));
+
+    for (let i = 0; i < findingRows.length; i += 500) {
+      await tx`insert into findings ${tx(findingRows.slice(i, i + 500))}`;
+    }
+
     await tx`
       update analyses
       set status = 'done',
@@ -215,6 +237,7 @@ export async function saveResult(sql: Db, id: string, result: AnalysisResult): P
           totals = ${tx.json(asJson(result.totals))},
           engines = ${tx.json(asJson(result.engines))},
           external = ${tx.json(asJson(result.external.slice(0, 100)))},
+          metrics = ${tx.json(asJson(result.metrics))},
           warnings = ${tx.json(asJson(result.warnings))},
           duration_ms = ${result.durationMs},
           error = null,
@@ -341,6 +364,8 @@ export interface GraphNode {
   dependents: number;
   /** จำนวนไฟล์ที่ไฟล์นี้พึ่งพา */
   dependencies: number;
+  /** จำนวนไฟล์ที่ได้รับผลกระทบถ้าไฟล์นี้เปลี่ยน (รวมทางอ้อม) */
+  blast: number;
 }
 
 export interface GraphData {
@@ -372,6 +397,7 @@ export async function getGraph(sql: Db, id: string, limit = 3000): Promise<Graph
       language: string | null;
       loc: number;
       dependents: number;
+      blast: number;
       dependencies: string;
     }[]
   >`
@@ -379,6 +405,7 @@ export async function getGraph(sql: Db, id: string, limit = 3000): Promise<Graph
            f.language,
            f.loc,
            f.dependents,
+           f.blast,
            (select count(*) from edges e where e.analysis_id = f.analysis_id and e.src = f.path)::text
              as dependencies
     from files f
@@ -393,6 +420,7 @@ export async function getGraph(sql: Db, id: string, limit = 3000): Promise<Graph
     loc: row.loc,
     dependents: row.dependents,
     dependencies: Number(row.dependencies),
+    blast: row.blast,
   }));
 
   const visible = new Set(nodes.map((node) => node.path));
@@ -442,5 +470,87 @@ export async function getNeighbours(
   return {
     dependents: incoming.map((row) => row.src),
     dependencies: outgoing.map((row) => row.dst),
+  };
+}
+
+export interface FindingRow {
+  path: string;
+  line: number;
+  rule: string;
+  severity: 'high' | 'medium' | 'low';
+  message: string;
+  snippet: string | null;
+}
+
+/** ข้อสังเกตด้านความปลอดภัย เรียงจากรุนแรงมากไปน้อย */
+export async function getFindings(sql: Db, id: string, limit = 200): Promise<FindingRow[]> {
+  return sql<FindingRow[]>`
+    select path, line, rule, severity, message, snippet
+    from findings
+    where analysis_id = ${id}
+    order by case severity when 'high' then 0 when 'medium' then 1 else 2 end, path asc
+    limit ${Math.min(limit, 500)}
+  `;
+}
+
+export interface RankedFile {
+  path: string;
+  language: string | null;
+  loc: number;
+  dependents: number;
+  churn: number;
+  blast: number;
+  authors: { name: string; commits: number }[];
+  lastCommitAt: string | null;
+}
+
+/** จัดอันดับไฟล์ตามมิติที่ผู้ใช้อยากรู้ — แก้บ่อยสุด กระทบกว้างสุด หรือถูกพึ่งพามากสุด */
+export async function getRankedFiles(
+  sql: Db,
+  id: string,
+  by: 'churn' | 'blast' | 'dependents',
+  limit = 20,
+): Promise<RankedFile[]> {
+  const capped = Math.min(Math.max(limit, 1), 200);
+  const rows =
+    by === 'churn'
+      ? await sql`select path, language, loc, dependents, churn, blast, authors, last_commit_at
+                  from files where analysis_id = ${id} and churn > 0
+                  order by churn desc, path asc limit ${capped}`
+      : by === 'blast'
+        ? await sql`select path, language, loc, dependents, churn, blast, authors, last_commit_at
+                    from files where analysis_id = ${id} and blast > 0
+                    order by blast desc, path asc limit ${capped}`
+        : await sql`select path, language, loc, dependents, churn, blast, authors, last_commit_at
+                    from files where analysis_id = ${id} and dependents > 0
+                    order by dependents desc, path asc limit ${capped}`;
+
+  return rows.map((row) => ({
+    path: row.path as string,
+    language: (row.language as string | null) ?? null,
+    loc: Number(row.loc),
+    dependents: Number(row.dependents),
+    churn: Number(row.churn),
+    blast: Number(row.blast),
+    authors: (row.authors as { name: string; commits: number }[] | null) ?? [],
+    lastCommitAt: row.last_commit_at instanceof Date ? row.last_commit_at.toISOString() : null,
+  }));
+}
+
+/** ข้อมูลรายไฟล์เพิ่มเติมสำหรับแผงรายละเอียด */
+export async function getFileInsight(
+  sql: Db,
+  id: string,
+  path: string,
+): Promise<{ churn: number; blast: number; authors: { name: string; commits: number }[] } | null> {
+  const rows = await sql`
+    select churn, blast, authors from files where analysis_id = ${id} and path = ${path} limit 1
+  `;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    churn: Number(row.churn),
+    blast: Number(row.blast),
+    authors: (row.authors as { name: string; commits: number }[] | null) ?? [],
   };
 }
