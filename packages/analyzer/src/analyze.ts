@@ -1,11 +1,17 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { cloneRepo, type CloneOptions } from './clone.js';
-import { buildGraph, type Edge, type ExternalDependency } from './graph.js';
+import { buildGraph, type Edge, type ExternalDependency, type FileExternalUsage } from './graph.js';
 import { churnMap, readHistory, type FileHistory } from './history.js';
 import { takeInventory, type FileEntry, type InventoryResult } from './inventory.js';
 import { blastRadius, computeMetrics, type Metrics } from './metrics.js';
-import { parseSource, treeSitterFailure, type RawImport, type SymbolInfo } from './parse/index.js';
+import {
+  parseSource,
+  treeSitterFailure,
+  type ImportKind,
+  type RawImport,
+  type SymbolInfo,
+} from './parse/index.js';
 import { parseRepoRef, type RepoRef } from './repo-ref.js';
 import { scanFile, summarize, type Finding } from './security.js';
 
@@ -60,13 +66,29 @@ export interface AnalysisResult {
   totals: InventoryResult['totals'];
   edges: Edge[];
   external: ExternalDependency[];
+  externalByFile: FileExternalUsage[];
   unresolved: number;
   symbols: FileSymbol[];
   metrics: Metrics;
   findings: Finding[];
   engines: { treeSitter: number; pattern: number };
+  /** จำนวนไฟล์ที่ใช้ผลจากรอบวิเคราะห์ก่อนหน้าซ้ำ เพราะเนื้อหาไม่เปลี่ยน (v0.7.0) */
+  reusedFiles: number;
   warnings: string[];
   durationMs: number;
+}
+
+/**
+ * ผลจากไฟล์เดียวในรอบวิเคราะห์ก่อนหน้า — เก็บเท่าที่ต้องใช้เพื่อข้ามการพาร์สไฟล์ที่เนื้อหาไม่เปลี่ยน
+ * โดยไม่ต้องอ่านหรือพาร์สไฟล์นั้นซ้ำเลย (v0.7.0)
+ */
+export interface PreviousFileSnapshot {
+  hash: string;
+  symbols: SymbolInfo[];
+  /** เส้นที่แก้ไขจากไฟล์นี้ในรอบก่อน (ไม่รวมพาธต้นทางเพราะซ้ำกับ key ของ Map ที่เก็บอยู่แล้ว) */
+  edges: { to: string; kind: ImportKind; line: number; confidence: number }[];
+  findings: Omit<Finding, 'path'>[];
+  externals: { specifier: string; count: number }[];
 }
 
 export interface AnalyzeOptions extends CloneOptions {
@@ -78,6 +100,11 @@ export interface AnalyzeOptions extends CloneOptions {
   maxCommits?: number;
   concurrency?: number;
   onProgress?: (event: ProgressEvent) => void;
+  /**
+   * ผลจากรอบวิเคราะห์ก่อนหน้าของ repo เดียวกัน — ไฟล์ที่ค่าแฮชตรงกับรอบนี้จะไม่ถูกอ่านหรือพาร์สใหม่เลย
+   * ใช้ผลเดิมแทนทั้งหมด ไม่ระบุ = วิเคราะห์เต็มรูปแบบทุกไฟล์เหมือนเดิม
+   */
+  previousFiles?: Map<string, PreviousFileSnapshot>;
 }
 
 const STAGE_PERCENT: Record<Stage, number> = {
@@ -160,8 +187,38 @@ export async function analyzeRepo(
     const findings: Finding[] = [];
     const maxSymbols = options.maxSymbolsPerFile ?? 300;
     const engines = { treeSitter: 0, pattern: 0 };
+    const reusedEdges: Edge[] = [];
+    const reusedExternal: FileExternalUsage[] = [];
+    let reusedFiles = 0;
 
     await mapWithLimit(readable, options.concurrency ?? 8, async (file) => {
+      // ไฟล์ที่แฮชตรงกับรอบก่อนหน้าเนื้อหาไม่เปลี่ยนแม้แต่ไบต์เดียว — ใช้ผลเดิมทั้งหมดแทน
+      // โดยไม่อ่านหรือพาร์สไฟล์นี้ซ้ำเลย เพราะการอ่าน AST ด้วย tree-sitter คือส่วนที่กินเวลาที่สุด
+      // ของทั้งไปป์ไลน์ ยิ่งข้ามได้มาก รอบวิเคราะห์ซ้ำของ repo ที่แก้แค่ไม่กี่ไฟล์ก็ยิ่งเร็วขึ้นมาก
+      const previous = options.previousFiles?.get(file.path);
+      if (previous && file.hash !== '' && previous.hash === file.hash) {
+        reusedFiles += 1;
+        for (const symbol of previous.symbols.slice(0, maxSymbols)) {
+          symbols.push({ ...symbol, path: file.path });
+        }
+        for (const edge of previous.edges) {
+          reusedEdges.push({
+            from: file.path,
+            to: edge.to,
+            kind: edge.kind,
+            line: edge.line,
+            confidence: edge.confidence,
+          });
+        }
+        for (const finding of previous.findings) {
+          findings.push({ ...finding, path: file.path });
+        }
+        for (const usage of previous.externals) {
+          reusedExternal.push({ path: file.path, specifier: usage.specifier, count: usage.count });
+        }
+        return;
+      }
+
       const source = await readFile(join(clone.dir, file.path), 'utf8');
 
       // สแกนความปลอดภัยกับทุกไฟล์ที่อ่านเป็นข้อความได้ ไม่ใช่เฉพาะไฟล์โค้ด
@@ -190,6 +247,7 @@ export async function analyzeRepo(
       files: inventory.files.map((file) => ({ path: file.path, language: file.language })),
       imports,
       goModule: await readGoModule(clone.dir),
+      reused: { edges: reusedEdges, externalByFile: reusedExternal },
     });
 
     report('metrics', STAGE_LABELS.metrics);
@@ -240,11 +298,13 @@ export async function analyzeRepo(
       totals: inventory.totals,
       edges: graph.edges,
       external: graph.external,
+      externalByFile: graph.externalByFile,
       unresolved: graph.unresolved,
       symbols,
       metrics,
       findings,
       engines,
+      reusedFiles,
       warnings,
       durationMs: Date.now() - startedAt,
     };

@@ -84,6 +84,13 @@ export default async function ExplorerPage({ params }: { params: Promise<{ id: s
           <h1 className="mt-2 font-mono text-2xl font-semibold tracking-tight">
             {analysis.owner}/{analysis.name}
           </h1>
+          <a
+            className="mt-1 inline-block font-mono text-[11px] text-faint underline decoration-dotted underline-offset-2 transition-colors hover:text-accent"
+            href={`/r/${analysis.host}/${analysis.owner}/${analysis.name}`}
+            title="ลิงก์ถาวรของ repo นี้ — เปิดได้เสมอ พาไปผลล่าสุดโดยไม่ต้องจำรหัสงาน"
+          >
+            /r/{analysis.host}/{analysis.owner}/{analysis.name}
+          </a>
         </div>
 
         <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 font-mono text-[11px] text-faint">

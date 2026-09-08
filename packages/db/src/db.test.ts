@@ -12,6 +12,7 @@ import {
   getFindings,
   getGraph,
   getNeighbours,
+  getPreviousSnapshot,
   getRankedFiles,
   getSymbols,
   markFailed,
@@ -75,6 +76,7 @@ function makeResult(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
     },
     edges: [{ from: 'src/index.ts', to: 'src/util.ts', kind: 'from', line: 1, confidence: 0.9 }],
     external: [{ specifier: 'react', count: 3 }],
+    externalByFile: [{ path: 'src/index.ts', specifier: 'react', count: 3 }],
     unresolved: 0,
     symbols: [{ path: 'src/index.ts', name: 'main', kind: 'function', line: 3 }],
     insights: new Map([
@@ -111,6 +113,7 @@ function makeResult(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
       },
     ],
     engines: { treeSitter: 2, pattern: 0 },
+    reusedFiles: 0,
     warnings: [],
     durationMs: 1234,
     ...overrides,
@@ -403,5 +406,80 @@ describe('ตัวชี้วัดของ v0.4.0', () => {
   it('กราฟส่งรัศมีผลกระทบไปด้วย เพื่อใช้ลงสีได้โดยไม่ต้องยิงเพิ่ม', async () => {
     const graph = await getGraph(sql, await seedMetrics());
     expect(graph.nodes.find((node) => node.path === 'src/util.ts')?.blast).toBe(1);
+  });
+});
+
+describe('ผลจากรอบวิเคราะห์ก่อนหน้า (ใช้ข้ามการพาร์สไฟล์ที่ไม่เปลี่ยนในรอบใหม่)', () => {
+  it('repo ที่ไม่เคยวิเคราะห์เสร็จมาก่อนคืน null', async () => {
+    const neverAnalyzed = { ...ref, name: `ยังไม่เคย-${Date.now()}` };
+    expect(await getPreviousSnapshot(sql, neverAnalyzed, 1)).toBeNull();
+  });
+
+  it('ประกอบสัญลักษณ์ เส้นเชื่อม ข้อสังเกต และแพ็กเกจภายนอกแยกตามไฟล์ได้ถูกต้อง', async () => {
+    const id = await createAnalysis(sql, {
+      ref,
+      requestedInput: `${ref.owner}/${ref.name}`,
+      analyzerSchema: 1,
+      appVersion: '0.7.0-ทดสอบ',
+    });
+    await saveResult(sql, id, makeResult());
+
+    const snapshot = await getPreviousSnapshot(sql, ref, 1);
+    expect(snapshot).not.toBeNull();
+
+    const indexFile = snapshot?.get('src/index.ts');
+    expect(indexFile?.hash).toBe('abc');
+    expect(indexFile?.symbols).toEqual([{ name: 'main', kind: 'function', line: 3 }]);
+    expect(indexFile?.edges).toEqual([
+      { to: 'src/util.ts', kind: 'from', line: 1, confidence: 0.9 },
+    ]);
+    expect(indexFile?.findings).toHaveLength(1);
+    expect(indexFile?.findings[0]?.rule).toBe('hardcoded-secret');
+    expect(indexFile?.externals).toEqual([{ specifier: 'react', count: 3 }]);
+
+    const utilFile = snapshot?.get('src/util.ts');
+    expect(utilFile?.hash).toBe('def');
+    expect(utilFile?.symbols).toEqual([]);
+    expect(utilFile?.edges).toEqual([]);
+  });
+
+  it('ใช้ผลของงานวิเคราะห์ล่าสุดของ repo นี้เสมอ ไม่ใช่งานแรกที่เจอ', async () => {
+    const first = await createAnalysis(sql, {
+      ref,
+      requestedInput: `${ref.owner}/${ref.name}`,
+      analyzerSchema: 1,
+      appVersion: '0.7.0-ทดสอบ',
+    });
+    await saveResult(sql, first, makeResult());
+
+    const second = await createAnalysis(sql, {
+      ref,
+      requestedInput: `${ref.owner}/${ref.name}`,
+      analyzerSchema: 1,
+      appVersion: '0.7.0-ทดสอบ',
+    });
+    await saveResult(
+      sql,
+      second,
+      makeResult({
+        files: [
+          {
+            path: 'src/index.ts',
+            language: 'typescript',
+            bytes: 999,
+            loc: 99,
+            hash: 'ค่าใหม่',
+            parsed: true,
+            skipReason: null,
+          },
+        ],
+        symbols: [],
+        edges: [],
+      }),
+    );
+
+    const snapshot = await getPreviousSnapshot(sql, ref, 1);
+    expect(snapshot?.get('src/index.ts')?.hash).toBe('ค่าใหม่');
+    expect(snapshot?.has('src/util.ts')).toBe(false);
   });
 });

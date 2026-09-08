@@ -1,4 +1,10 @@
-import type { AnalysisResult, Metrics, RepoRef, Stage } from '@repolens/analyzer';
+import type {
+  AnalysisResult,
+  Metrics,
+  PreviousFileSnapshot,
+  RepoRef,
+  Stage,
+} from '@repolens/analyzer';
 import { countDependents } from '@repolens/analyzer';
 import type { Db } from './client.js';
 
@@ -166,6 +172,7 @@ export async function saveResult(sql: Db, id: string, result: AnalysisResult): P
     await tx`delete from edges where analysis_id = ${id}`;
     await tx`delete from symbols where analysis_id = ${id}`;
     await tx`delete from findings where analysis_id = ${id}`;
+    await tx`delete from file_externals where analysis_id = ${id}`;
 
     const fileRows = result.files.map((file) => ({
       analysis_id: id,
@@ -226,6 +233,19 @@ export async function saveResult(sql: Db, id: string, result: AnalysisResult): P
       await tx`insert into findings ${tx(findingRows.slice(i, i + 500))}`;
     }
 
+    // เก็บแยกรายไฟล์ไว้ต่างหากจากสรุปรวมใน analyses.external เพราะรอบวิเคราะห์ซ้ำแบบ incremental
+    // (v0.7.0) ต้องรู้ว่าไฟล์แต่ละไฟล์ที่ไม่ถูกพาร์สใหม่เคยเรียกใช้แพ็กเกจภายนอกตัวไหนไปบ้าง
+    const externalRows = result.externalByFile.map((usage) => ({
+      analysis_id: id,
+      path: usage.path,
+      specifier: usage.specifier,
+      count: usage.count,
+    }));
+
+    for (let i = 0; i < externalRows.length; i += 500) {
+      await tx`insert into file_externals ${tx(externalRows.slice(i, i + 500))}`;
+    }
+
     await tx`
       update analyses
       set status = 'done',
@@ -269,6 +289,87 @@ export async function findCachedAnalysis(
   );
   const row = rows[0];
   return row ? toRow(row) : null;
+}
+
+/**
+ * ผลจากรอบวิเคราะห์ก่อนหน้าของ repo เดียวกัน (ไม่สนคอมมิต) ใช้ป้อนให้ analyzeRepo ข้าม
+ * การอ่านและพาร์สไฟล์ที่เนื้อหาไม่เปลี่ยนได้ (v0.7.0) — ไม่มีของเดิมให้ใช้คืน null เฉย ๆ
+ * ซึ่งแปลว่าวิเคราะห์เต็มรูปแบบตามปกติ ไม่ใช่ข้อผิดพลาด
+ */
+export async function getPreviousSnapshot(
+  sql: Db,
+  ref: RepoRef,
+  analyzerSchema: number,
+): Promise<Map<string, PreviousFileSnapshot> | null> {
+  const previous = await findCachedAnalysis(sql, ref, analyzerSchema);
+  if (!previous) return null;
+
+  const [files, symbols, edges, findings, externals] = await Promise.all([
+    sql<{ path: string; hash: string | null }[]>`
+      select path, hash from files where analysis_id = ${previous.id}
+    `,
+    sql<{ path: string; name: string; kind: string; line: number }[]>`
+      select path, name, kind, line from symbols where analysis_id = ${previous.id}
+    `,
+    sql<{ src: string; dst: string; kind: string; line: number; confidence: number }[]>`
+      select src, dst, kind, line, confidence from edges where analysis_id = ${previous.id}
+    `,
+    sql<
+      {
+        path: string;
+        line: number;
+        rule: string;
+        severity: string;
+        message: string;
+        snippet: string | null;
+      }[]
+    >`
+      select path, line, rule, severity, message, snippet from findings where analysis_id = ${previous.id}
+    `,
+    sql<{ path: string; specifier: string; count: number }[]>`
+      select path, specifier, count from file_externals where analysis_id = ${previous.id}
+    `,
+  ]);
+
+  const snapshot = new Map<string, PreviousFileSnapshot>();
+  for (const file of files) {
+    snapshot.set(file.path, {
+      hash: file.hash ?? '',
+      symbols: [],
+      edges: [],
+      findings: [],
+      externals: [],
+    });
+  }
+  for (const symbol of symbols) {
+    snapshot.get(symbol.path)?.symbols.push({
+      name: symbol.name,
+      kind: symbol.kind as PreviousFileSnapshot['symbols'][number]['kind'],
+      line: symbol.line,
+    });
+  }
+  for (const edge of edges) {
+    snapshot.get(edge.src)?.edges.push({
+      to: edge.dst,
+      kind: edge.kind as PreviousFileSnapshot['edges'][number]['kind'],
+      line: edge.line,
+      confidence: Number(edge.confidence),
+    });
+  }
+  for (const finding of findings) {
+    snapshot.get(finding.path)?.findings.push({
+      line: finding.line,
+      rule: finding.rule,
+      severity: finding.severity as PreviousFileSnapshot['findings'][number]['severity'],
+      message: finding.message,
+      snippet: finding.snippet ?? '',
+    });
+  }
+  for (const usage of externals) {
+    snapshot.get(usage.path)?.externals.push({ specifier: usage.specifier, count: usage.count });
+  }
+
+  return snapshot;
 }
 
 export interface FileRow {

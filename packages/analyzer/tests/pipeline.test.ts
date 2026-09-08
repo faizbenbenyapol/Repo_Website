@@ -4,7 +4,38 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { analyzeRepo, countDependents, takeInventory, type ProgressEvent } from '../src/index.js';
+import {
+  analyzeRepo,
+  countDependents,
+  takeInventory,
+  type AnalysisResult,
+  type PreviousFileSnapshot,
+  type ProgressEvent,
+} from '../src/index.js';
+
+/**
+ * แปลงผลวิเคราะห์ครั้งก่อนให้อยู่ในรูปที่ analyzeRepo รับเป็น previousFiles ได้
+ * เลียนแบบสิ่งที่ @repolens/db จะทำจริงตอนดึงผลของ repo เดียวกันจากรอบก่อนมาใช้ต่อ
+ */
+function toPreviousFiles(result: AnalysisResult): Map<string, PreviousFileSnapshot> {
+  const map = new Map<string, PreviousFileSnapshot>();
+  for (const file of result.files) {
+    map.set(file.path, {
+      hash: file.hash,
+      symbols: result.symbols
+        .filter((s) => s.path === file.path)
+        .map(({ path: _p, ...rest }) => rest),
+      edges: result.edges.filter((e) => e.from === file.path).map(({ from: _f, ...rest }) => rest),
+      findings: result.findings
+        .filter((f) => f.path === file.path)
+        .map(({ path: _p, ...rest }) => rest),
+      externals: result.externalByFile
+        .filter((u) => u.path === file.path)
+        .map(({ path: _p, ...rest }) => rest),
+    });
+  }
+  return map;
+}
 
 const run = promisify(execFile);
 
@@ -201,4 +232,86 @@ describe('ไปป์ไลน์ทั้งหมดบน repo จริง'
     await expect(analyzeRepo('https://example.com/a/b')).rejects.toThrow(/example.com/);
     await expect(analyzeRepo(repoDir)).rejects.toThrow(/GitHub/);
   });
+});
+
+describe('วิเคราะห์ซ้ำแบบ incremental', () => {
+  it('ข้ามการอ่านและพาร์สไฟล์ที่เนื้อหาไม่เปลี่ยนจากรอบก่อน แต่ยังพาร์สไฟล์ที่แก้ใหม่จริง', async () => {
+    const first = await analyzeRepo(repoDir, { allowLocal: true });
+    const previousFiles = toPreviousFiles(first);
+
+    await writeFile(
+      join(repoDir, 'src/greet.ts'),
+      `import { formatName } from './util/format';
+
+export const greet = (name: string, extra?: unknown) => \`สวัสดี \${formatName(name)}\` + String(extra);
+
+export function shout(name: string): string {
+  return formatName(name).toUpperCase();
+}
+`,
+      'utf8',
+    );
+    await run('git', ['add', '-A'], { cwd: repoDir });
+    await run('git', ['commit', '-q', '-m', 'เพิ่มฟังก์ชัน shout'], { cwd: repoDir });
+
+    const second = await analyzeRepo(repoDir, { allowLocal: true, previousFiles });
+
+    // ไฟล์ที่อ่านได้ทั้งหมดยกเว้นไฟล์ที่เพิ่งแก้ต้องถูกนับว่าใช้ผลเดิม
+    const readableCount = second.files.filter((file) => file.hash !== '' && file.loc > 0).length;
+    expect(second.reusedFiles).toBe(readableCount - 1);
+
+    // ไฟล์ที่แก้ต้องถูกพาร์สใหม่จริง ไม่ใช่ใช้ของเดิม — เห็นฟังก์ชันใหม่ที่เพิ่งเพิ่มเข้าไป
+    expect(
+      second.symbols.some((symbol) => symbol.path === 'src/greet.ts' && symbol.name === 'shout'),
+    ).toBe(true);
+    expect(first.symbols.some((symbol) => symbol.name === 'shout')).toBe(false);
+
+    // ไฟล์ python ที่ไม่ได้แตะเลยต้องยังมีเส้นเชื่อมเดิมอยู่ครบ แม้จะไม่ถูกพาร์สใหม่ในรอบนี้
+    const reusedEdge = second.edges.find(
+      (edge) => edge.from === 'scripts/tool.py' && edge.to === 'src/helper.py',
+    );
+    expect(reusedEdge).toBeDefined();
+    const originalEdge = first.edges.find(
+      (edge) => edge.from === 'scripts/tool.py' && edge.to === 'src/helper.py',
+    );
+    expect(reusedEdge).toEqual(originalEdge);
+
+    // แพ็กเกจภายนอกจากไฟล์ที่ไม่เปลี่ยน (src/index.ts เรียก express) ต้องยังถูกนับรวมอยู่
+    expect(second.external.map((item) => item.specifier)).toContain('express');
+
+    // ข้อสังเกตด้านความปลอดภัยจากไฟล์ที่ไม่เปลี่ยนต้องยังอยู่ครบเช่นกัน
+    expect(second.findings.some((finding) => finding.rule === 'hardcoded-secret')).toBe(true);
+  }, 90_000);
+
+  it('ไฟล์ที่ถูกลบไปแล้วไม่ทิ้งเส้นลอยไว้ในรอบใหม่', async () => {
+    const first = await analyzeRepo(repoDir, { allowLocal: true });
+    const previousFiles = toPreviousFiles(first);
+
+    // greet.ts ถูกลบไปในรอบนี้ — เส้นที่เคยชี้ไปหามันจากไฟล์อื่นต้องหายไปด้วย ไม่ใช่ค้างเป็นเส้นลอย
+    await run('git', ['rm', '-q', 'src/greet.ts'], { cwd: repoDir });
+    await writeFile(
+      join(repoDir, 'src/index.ts'),
+      `import { formatName } from './util/format';
+import express from 'express';
+
+export function main() {
+  return formatName('โลก') + String(express);
+}
+`,
+      'utf8',
+    );
+    await run('git', ['add', '-A'], { cwd: repoDir });
+    await run('git', ['commit', '-q', '-m', 'ลบ greet.ts'], { cwd: repoDir });
+
+    const second = await analyzeRepo(repoDir, { allowLocal: true, previousFiles });
+
+    expect(second.files.some((file) => file.path === 'src/greet.ts')).toBe(false);
+    expect(second.edges.some((edge) => edge.to === 'src/greet.ts')).toBe(false);
+
+    // ไฟล์ python ที่ไม่เกี่ยวข้องกับการลบครั้งนี้เลยยังต้องถูกใช้ผลเดิมตามปกติ
+    expect(second.reusedFiles).toBeGreaterThan(0);
+
+    // คืน greet.ts กลับมาเพื่อไม่ให้กระทบเทสต์อื่นที่ใช้ repoDir ร่วมกัน
+    await run('git', ['revert', '--no-edit', 'HEAD'], { cwd: repoDir });
+  }, 90_000);
 });

@@ -132,9 +132,17 @@ export const FEATURES: Feature[] = [
   {
     id: 'thai-report',
     name: 'รายงานภาษาไทย',
-    detail: 'ส่งออกเป็น Markdown หรือ PDF สำหรับส่งต่อให้ทีม',
+    detail: 'ส่งออกเป็น Markdown สำหรับส่งต่อให้ทีม — รูปแบบ PDF จะตามมาทีหลัง',
     tier: 'member',
-    status: 'planned',
+    status: 'shipped',
+    since: '0.7.0',
+  },
+  {
+    id: 'permalink',
+    name: 'ลิงก์ถาวร',
+    detail: 'เปิดที่ /r/host/owner/name ได้เสมอ พาไปผลล่าสุดโดยไม่ต้องจำรหัสงาน',
+    tier: 'visitor',
+    status: 'shipped',
     since: '0.7.0',
   },
 ];

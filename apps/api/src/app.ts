@@ -5,6 +5,7 @@ import { authRoutes } from './routes/auth.js';
 import { comprehensionRoutes } from './routes/comprehension.js';
 import { healthRoutes } from './routes/health.js';
 import { qaRoutes } from './routes/qa.js';
+import { reportRoutes } from './routes/report.js';
 import { sessionRoutes } from './routes/session.js';
 import { versionRoutes } from './routes/version.js';
 import type { Services } from './services.js';
@@ -32,6 +33,7 @@ export async function buildApp(services: Services): Promise<FastifyInstance> {
   await app.register(analysisRoutes(services));
   await app.register(comprehensionRoutes(services));
   await app.register(qaRoutes(services));
+  await app.register(reportRoutes(services));
 
   app.setNotFoundHandler(async (request, reply) =>
     reply.status(404).send({ error: `ไม่พบเส้นทาง ${request.method} ${request.url}` }),

@@ -130,3 +130,51 @@ test('สมาชิกที่ผูกกุญแจแล้วเห็�
   await expect(page.getByRole('button', { name: 'สรุป repo นี้' })).toBeEnabled();
   await expect(page.getByText('อ่านทุกไฟล์แล้วเขียนสรุปเป็นภาษาไทย')).toBeVisible();
 });
+
+test('สมาชิกส่งออกรายงานภาษาไทยเป็น Markdown ได้โดยไม่ต้องมี API key ที่ใช้ได้', async ({
+  page,
+  request,
+}) => {
+  const created = await request.post('/api/analyses', { data: { input: '/fixtures/demo' } });
+  const { id } = await created.json();
+
+  await expect
+    .poll(
+      async () => {
+        const res = await request.get(`/api/analyses/${id}`);
+        return (await res.json()).analysis.status;
+      },
+      { timeout: 90_000, intervals: [500] },
+    )
+    .toBe('done');
+
+  await page.goto('/login');
+  await page.getByRole('button', { name: 'ยังไม่มีบัญชี? สมัครใหม่' }).click();
+  await page.getByLabel('อีเมล').fill(newEmail());
+  await page.getByLabel('รหัสผ่าน').fill(PASSWORD);
+  await page.getByRole('button', { name: 'สมัครสมาชิก', exact: true }).click();
+  await expect(page).toHaveURL(/\/account$/);
+
+  await page.goto(`/a/${id}/report`);
+  const link = page.getByRole('link', { name: 'ส่งออกรายงานภาษาไทยเป็น Markdown' });
+  await expect(link).toBeVisible();
+
+  const href = await link.getAttribute('href');
+  const response = await page.request.get(href ?? '');
+  expect(response.ok()).toBeTruthy();
+  expect(response.headers()['content-type']).toContain('text/markdown');
+
+  const markdown = await response.text();
+  // repo ในเครื่องได้ owner เป็น 'local' เสมอ ชื่อมาจากชื่อโฟลเดอร์ (ดู parseRepoRef)
+  expect(markdown).toContain('# local/demo');
+  expect(markdown).toContain('## คะแนนสุขภาพ');
+});
+
+test('ลิงก์ถาวรของโฮสต์ที่ไม่อนุญาตแสดงข้อผิดพลาดแทนที่จะพังเงียบ ๆ', async ({ page }) => {
+  // ทดสอบด้วยโฮสต์ที่ไม่ได้อยู่ในรายชื่อที่อนุญาต เพราะจุดนี้ปฏิเสธได้ทันทีโดยไม่ต้องพึ่งเครือข่ายจริง
+  // เหมือนที่เทสต์อื่นในไฟล์นี้ตั้งใจไม่พึ่งอินเทอร์เน็ตเพื่อให้ได้ผลเดิมทุกครั้ง
+  await page.goto('/r/evil.example.com/owner/name');
+  await expect(page.getByRole('heading', { name: 'เปิด repo นี้ไม่สำเร็จ' })).toBeVisible();
+  await expect(page.getByText('evil.example.com')).toBeVisible();
+  await expect(page.getByRole('link', { name: 'กลับไปหน้าแรก' })).toBeVisible();
+});

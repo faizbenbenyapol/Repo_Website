@@ -14,9 +14,16 @@ describe('ระดับการใช้งาน', () => {
     expect(featuresForTier('member')).toHaveLength(FEATURES.length);
   });
 
-  it('ฟีเจอร์ที่ยังไม่ปล่อยยังใช้ไม่ได้แม้เป็นสมาชิก', () => {
-    expect(isAvailable('thai-report', 'member')).toBe(false);
+  it('ฟีเจอร์ที่ไม่มีอยู่จริงใช้ไม่ได้ไม่ว่าระดับไหน', () => {
     expect(isAvailable('ไม่มีอยู่จริง', 'member')).toBe(false);
+    expect(isAvailable('ไม่มีอยู่จริง', 'visitor')).toBe(false);
+  });
+
+  it('ฟีเจอร์ที่ปล่อยแล้วทุกตัวต้องใช้ได้ตามระดับที่ประกาศไว้ ไม่รั่วไปให้ระดับที่ไม่ควรใช้ได้', () => {
+    for (const feature of FEATURES.filter((f) => f.status === 'shipped')) {
+      expect(isAvailable(feature.id, 'member')).toBe(true);
+      expect(isAvailable(feature.id, 'visitor')).toBe(feature.tier === 'visitor');
+    }
   });
 
   it('ทุกระดับมีคำอธิบายว่าต้องทำอะไรถึงใช้ได้', () => {

@@ -4,3 +4,4 @@ export * from './comprehension.js';
 export * from './tiers.js';
 export * from './changelog.js';
 export * from './queue.js';
+export * from './report.js';

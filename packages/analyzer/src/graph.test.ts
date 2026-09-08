@@ -64,6 +64,27 @@ describe('เชื่อมความสัมพันธ์ระหว่�
     expect(result.external.map((item) => item.specifier)).toContain('node:fs');
   });
 
+  it('แยกนับแพ็กเกจภายนอกรายไฟล์ไว้ด้วย เพื่อให้วิเคราะห์ซ้ำแบบ incremental คืนค่านับได้โดยไม่ต้องพาร์สใหม่', () => {
+    const result = buildGraph({
+      files: [
+        { path: 'a.ts', language: 'typescript' },
+        { path: 'b.ts', language: 'typescript' },
+      ],
+      imports: new Map([
+        ['a.ts', [imp('react'), imp('react')]],
+        ['b.ts', [imp('lodash')]],
+      ]),
+    });
+
+    expect(result.externalByFile).toEqual(
+      expect.arrayContaining([
+        { path: 'a.ts', specifier: 'react', count: 2 },
+        { path: 'b.ts', specifier: 'lodash', count: 1 },
+      ]),
+    );
+    expect(result.externalByFile).toHaveLength(2);
+  });
+
   it('นับจำนวนที่แก้ไม่ได้ แทนที่จะเงียบ', () => {
     const result = buildGraph({
       files: [{ path: 'a.ts', language: 'typescript' }],

@@ -198,6 +198,22 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
         >
           ส่งออกผลทั้งชุดเป็น JSON
         </a>
+        {sessionData?.session.signedIn ? (
+          <a
+            className="text-sm text-accent underline underline-offset-4"
+            href={`/api/analyses/${id}/export/report.md`}
+          >
+            ส่งออกรายงานภาษาไทยเป็น Markdown
+          </a>
+        ) : (
+          <a
+            className="text-sm text-muted underline decoration-dotted underline-offset-4 transition-colors hover:text-accent"
+            href="/login"
+            title="ต้องเข้าสู่ระบบก่อนจึงจะส่งออกรายงานภาษาไทยได้"
+          >
+            ส่งออกรายงานภาษาไทยเป็น Markdown (ต้องเข้าสู่ระบบ)
+          </a>
+        )}
       </div>
 
       {analysis.warnings && analysis.warnings.length > 0 ? (
