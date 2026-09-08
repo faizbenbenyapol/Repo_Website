@@ -32,6 +32,7 @@ function toPreviousFiles(result: AnalysisResult): Map<string, PreviousFileSnapsh
       externals: result.externalByFile
         .filter((u) => u.path === file.path)
         .map(({ path: _p, ...rest }) => rest),
+      engine: result.fileEngines.get(file.path) ?? null,
     });
   }
   return map;
@@ -281,6 +282,12 @@ export function shout(name: string): string {
 
     // ข้อสังเกตด้านความปลอดภัยจากไฟล์ที่ไม่เปลี่ยนต้องยังอยู่ครบเช่นกัน
     expect(second.findings.some((finding) => finding.rule === 'hardcoded-secret')).toBe(true);
+
+    // ยอด engines ต้องรวมทั้งไฟล์ที่พาร์สใหม่และไฟล์ที่ใช้ผลเดิมซ้ำ ไม่ใช่แค่ไฟล์ที่พาร์สใหม่ในรอบนี้
+    // (เคยเป็นบั๊ก: รอบที่ทุกไฟล์ไม่เปลี่ยนเลยจะรายงาน engines เป็น 0 ทั้งที่พาร์สจริงมาก่อนแล้ว)
+    expect(second.engines.treeSitter + second.engines.pattern).toBeGreaterThanOrEqual(
+      first.engines.treeSitter + first.engines.pattern,
+    );
   }, 90_000);
 
   it('ไฟล์ที่ถูกลบไปแล้วไม่ทิ้งเส้นลอยไว้ในรอบใหม่', async () => {

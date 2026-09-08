@@ -183,6 +183,7 @@ export async function saveResult(sql: Db, id: string, result: AnalysisResult): P
       hash: file.hash,
       parsed: file.parsed,
       skip_reason: file.skipReason,
+      engine: result.fileEngines.get(file.path) ?? null,
       dependents: dependents.get(file.path) ?? 0,
       churn: result.insights.get(file.path)?.churn ?? 0,
       blast: result.insights.get(file.path)?.blast ?? 0,
@@ -305,8 +306,8 @@ export async function getPreviousSnapshot(
   if (!previous) return null;
 
   const [files, symbols, edges, findings, externals] = await Promise.all([
-    sql<{ path: string; hash: string | null }[]>`
-      select path, hash from files where analysis_id = ${previous.id}
+    sql<{ path: string; hash: string | null; engine: string | null }[]>`
+      select path, hash, engine from files where analysis_id = ${previous.id}
     `,
     sql<{ path: string; name: string; kind: string; line: number }[]>`
       select path, name, kind, line from symbols where analysis_id = ${previous.id}
@@ -339,6 +340,7 @@ export async function getPreviousSnapshot(
       edges: [],
       findings: [],
       externals: [],
+      engine: file.engine as PreviousFileSnapshot['engine'],
     });
   }
   for (const symbol of symbols) {

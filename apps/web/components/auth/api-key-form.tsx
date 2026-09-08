@@ -97,7 +97,7 @@ export function ApiKeyForm({ session }: { session: SessionState }) {
 
       <div className="flex flex-wrap gap-3">
         <button
-          className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity duration-150 disabled:opacity-50"
+          className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-opacity duration-150 disabled:opacity-50"
           disabled={busy || apiKey.trim().length === 0}
           onClick={() => void send('PUT')}
           type="button"

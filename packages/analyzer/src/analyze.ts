@@ -9,6 +9,7 @@ import {
   parseSource,
   treeSitterFailure,
   type ImportKind,
+  type ParseEngine,
   type RawImport,
   type SymbolInfo,
 } from './parse/index.js';
@@ -74,6 +75,8 @@ export interface AnalysisResult {
   engines: { treeSitter: number; pattern: number };
   /** จำนวนไฟล์ที่ใช้ผลจากรอบวิเคราะห์ก่อนหน้าซ้ำ เพราะเนื้อหาไม่เปลี่ยน (v0.7.0) */
   reusedFiles: number;
+  /** เครื่องมือพาร์สที่ใช้กับแต่ละไฟล์ (รวมไฟล์ที่ใช้ผลเดิมซ้ำด้วย) เก็บไว้ให้รอบถัดไปรวมยอด engines ถูกต้อง (v0.8.0) */
+  fileEngines: Map<string, ParseEngine>;
   warnings: string[];
   durationMs: number;
 }
@@ -89,6 +92,8 @@ export interface PreviousFileSnapshot {
   edges: { to: string; kind: ImportKind; line: number; confidence: number }[];
   findings: Omit<Finding, 'path'>[];
   externals: { specifier: string; count: number }[];
+  /** เครื่องมือที่เคยพาร์สไฟล์นี้ — null ถ้าไฟล์นี้ไม่เคยผ่านการพาร์ส (v0.8.0) */
+  engine: ParseEngine | null;
 }
 
 export interface AnalyzeOptions extends CloneOptions {
@@ -189,6 +194,7 @@ export async function analyzeRepo(
     const engines = { treeSitter: 0, pattern: 0 };
     const reusedEdges: Edge[] = [];
     const reusedExternal: FileExternalUsage[] = [];
+    const fileEngines = new Map<string, ParseEngine>();
     let reusedFiles = 0;
 
     await mapWithLimit(readable, options.concurrency ?? 8, async (file) => {
@@ -216,6 +222,13 @@ export async function analyzeRepo(
         for (const usage of previous.externals) {
           reusedExternal.push({ path: file.path, specifier: usage.specifier, count: usage.count });
         }
+        // ไฟล์นี้ไม่ถูกพาร์สใหม่ แต่เคยผ่านเครื่องมือไหนมาก่อนก็ยังนับรวมในยอด engines ของรอบนี้ด้วย
+        // ไม่งั้นรอบที่ทุกไฟล์ไม่เปลี่ยนเลยจะรายงานยอด engines เป็น 0 ทั้งที่พาร์สจริงมาแล้วทุกไฟล์
+        if (previous.engine) {
+          fileEngines.set(file.path, previous.engine);
+          if (previous.engine === 'tree-sitter') engines.treeSitter += 1;
+          else engines.pattern += 1;
+        }
         return;
       }
 
@@ -228,6 +241,7 @@ export async function analyzeRepo(
       if (!file.parsed || !file.language) return;
 
       const result = await parseSource(source, file.language);
+      fileEngines.set(file.path, result.engine);
       if (result.engine === 'tree-sitter') engines.treeSitter += 1;
       else engines.pattern += 1;
 
@@ -305,6 +319,7 @@ export async function analyzeRepo(
       findings,
       engines,
       reusedFiles,
+      fileEngines,
       warnings,
       durationMs: Date.now() - startedAt,
     };

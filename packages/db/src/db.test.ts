@@ -114,6 +114,10 @@ function makeResult(overrides: Partial<AnalysisResult> = {}): AnalysisResult {
     ],
     engines: { treeSitter: 2, pattern: 0 },
     reusedFiles: 0,
+    fileEngines: new Map([
+      ['src/index.ts', 'tree-sitter'],
+      ['src/util.ts', 'tree-sitter'],
+    ]),
     warnings: [],
     durationMs: 1234,
     ...overrides,
@@ -429,6 +433,7 @@ describe('ผลจากรอบวิเคราะห์ก่อนหน�
 
     const indexFile = snapshot?.get('src/index.ts');
     expect(indexFile?.hash).toBe('abc');
+    expect(indexFile?.engine).toBe('tree-sitter');
     expect(indexFile?.symbols).toEqual([{ name: 'main', kind: 'function', line: 3 }]);
     expect(indexFile?.edges).toEqual([
       { to: 'src/util.ts', kind: 'from', line: 1, confidence: 0.9 },

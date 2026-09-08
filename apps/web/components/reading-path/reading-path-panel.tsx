@@ -88,7 +88,7 @@ export function ReadingPathPanel({ analysisId, session, initialPath }: Props) {
             : 'จัดลำดับไฟล์ที่ควรอ่านก่อน-หลัง ตามความสัมพันธ์จริงในโค้ด'}
         </p>
         <button
-          className="shrink-0 rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity duration-150 disabled:opacity-50"
+          className="shrink-0 rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-opacity duration-150 disabled:opacity-50"
           disabled={busy}
           onClick={() => void generate()}
           type="button"

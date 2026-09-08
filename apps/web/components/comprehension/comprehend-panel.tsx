@@ -156,7 +156,7 @@ export function ComprehendPanel({ analysisId, session, run }: Props) {
         </div>
 
         <button
-          className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-white transition-opacity duration-150 disabled:opacity-50"
+          className="rounded-[6px] bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-opacity duration-150 disabled:opacity-50"
           disabled={starting || active}
           onClick={() => void start()}
           type="button"

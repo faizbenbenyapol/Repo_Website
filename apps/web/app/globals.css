@@ -8,11 +8,19 @@
   --color-line: #c7d0e1;
   --color-line-soft: #dce2ee;
   --color-text: #131a2b;
-  --color-muted: #57627c;
-  --color-faint: #8590a8;
+  /* เข้มพอที่คอนทราสต์กับพื้น --color-bg ถึง 4.5:1 จริงตอนเรนเดอร์ (v0.8.0)
+     ค่าเดิม #57627c คำนวณตามสูตรได้ 5.4:1 แต่ตัวอักษรเล็กที่เรนเดอร์จริงมี anti-aliasing
+     ทำให้คอนทราสต์ที่วัดจากพิกเซลจริงลดลงเหลือ ~4.5:1 เท่านั้น จึงเผื่อขอบไว้มากขึ้น */
+  --color-muted: #414c66;
+  --color-faint: #4d5771;
   --color-accent: #2a57c6;
   --color-accent-soft: #dfe6f8;
-  --color-brass: #8a6712;
+  /* ตัวหนังสือบนพื้นสีเน้น — แยกจาก --color-accent ตั้งใจ (v0.8.0)
+     ธีมมืดใช้สีเน้นแบบพาสเทลสว่างให้ตัวมันเองอ่านออกบนพื้นมืด แต่พาสเทลสว่างขนาดนั้น
+     ใส่ตัวหนังสือขาวทับไม่ผ่าน 4.5:1 (วัดจริงได้ 2.29:1) ปุ่มธีมมืดจึงต้องใช้ตัวหนังสือเข้มแทน */
+  --color-on-accent: #ffffff;
+  /* เข้มพอที่คอนทราสต์ ≥ 4.5:1 จริงตอนเรนเดอร์บนพื้น --color-bg (v0.8.0) — เหตุผลเดียวกับด้านบน */
+  --color-brass: #5c4310;
   --color-brass-soft: #f0e6cf;
 
   /* สีเชิงความหมาย แยกจากสีเน้น เพราะบอกสถานะของข้อมูล ไม่ใช่สิ่งที่ผู้ใช้เลือกอยู่ */
@@ -39,9 +47,12 @@
     --color-line-soft: #1c2640;
     --color-text: #e2e8f5;
     --color-muted: #909dbb;
-    --color-faint: #6c789a;
+    /* คอนทราสต์ที่วัดจริงของ #6c789a บนพื้นมืดได้แค่ ~4:1 (v0.8.0) จึงสว่างขึ้นให้ผ่าน 4.5:1 */
+    --color-faint: #8994b3;
     --color-accent: #88a9ff;
     --color-accent-soft: #1b2a4d;
+    /* ตัวหนังสือเข้มบนปุ่มสีเน้นพาสเทลของธีมมืด (เหตุผลเต็มอยู่ที่นิยามใน :root ด้านบน) */
+    --color-on-accent: #0b111e;
     --color-brass: #d9b463;
     --color-brass-soft: #2c2415;
     --color-good: #4fbf8b;
@@ -60,9 +71,10 @@
   --color-line-soft: #1c2640;
   --color-text: #e2e8f5;
   --color-muted: #909dbb;
-  --color-faint: #6c789a;
+  --color-faint: #8994b3;
   --color-accent: #88a9ff;
   --color-accent-soft: #1b2a4d;
+  --color-on-accent: #0b111e;
   --color-brass: #d9b463;
   --color-brass-soft: #2c2415;
   --color-good: #4fbf8b;

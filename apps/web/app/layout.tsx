@@ -25,17 +25,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className="min-h-screen">
         <header className="border-b border-line">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4">
+          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-4 sm:px-6">
             <a href="/" className="font-display text-lg font-semibold tracking-tight">
               RepoLens
             </a>
-            <nav className="flex items-center gap-5 text-sm text-muted">
+            <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted sm:gap-x-5">
               <a className="transition-colors hover:text-accent" href="/versions">
                 ประวัติเวอร์ชัน
               </a>
               <SessionNav />
               <a
-                className="transition-colors hover:text-accent"
+                className="hidden transition-colors hover:text-accent sm:inline"
                 href="https://github.com/braedonsaunders/codeflow"
                 rel="noreferrer noopener"
                 target="_blank"

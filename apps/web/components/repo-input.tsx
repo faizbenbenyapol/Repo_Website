@@ -73,7 +73,7 @@ export function RepoInput() {
           value={value}
         />
         <button
-          className="shrink-0 rounded-[6px] border border-accent bg-accent px-6 py-3 text-sm font-medium text-white transition-transform duration-150 hover:-translate-y-px active:translate-y-0 disabled:opacity-60"
+          className="shrink-0 rounded-[6px] border border-accent bg-accent px-6 py-3 text-sm font-medium text-on-accent transition-transform duration-150 hover:-translate-y-px active:translate-y-0 disabled:opacity-60"
           disabled={busy}
           type="submit"
         >
