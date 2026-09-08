@@ -499,11 +499,6 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           </ul>
         </div>
       </section>
-
-      <p className="mt-16 text-sm text-muted">
-        คำอธิบายภาษาไทยรายไฟล์และการถาม–ตอบกับ repo จะมาในรุ่น v0.5.0 สำหรับสมาชิกที่ใส่ API key
-        ของตัวเอง
-      </p>
     </div>
   );
 }
