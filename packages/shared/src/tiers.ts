@@ -118,7 +118,7 @@ export const FEATURES: Feature[] = [
     name: 'ถาม–ตอบกับ repo',
     detail: 'ถามเป็นภาษาไทย ได้คำตอบพร้อมอ้างอิงไฟล์และบรรทัดจริงที่คลิกเปิดได้',
     tier: 'member',
-    status: 'planned',
+    status: 'shipped',
     since: '0.6.0',
   },
   {
@@ -126,7 +126,7 @@ export const FEATURES: Feature[] = [
     name: 'เส้นทางอ่านโค้ดสำหรับคนใหม่',
     detail: 'ควรเริ่มอ่านไฟล์ไหนก่อน เรียงจากความสำคัญที่คำนวณจากกราฟจริง',
     tier: 'member',
-    status: 'planned',
+    status: 'shipped',
     since: '0.6.0',
   },
   {

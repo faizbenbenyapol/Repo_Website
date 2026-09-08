@@ -92,6 +92,9 @@ export default async function ExplorerPage({ params }: { params: Promise<{ id: s
           <span>{formatNumber(analysis.totals?.files ?? 0)} ไฟล์</span>
           <span>{formatNumber(analysis.totals?.loc ?? 0)} บรรทัด</span>
           <span>{formatNumber(symbolCount)} ฟังก์ชันและคลาส</span>
+          <a className="text-accent underline underline-offset-4" href={`/a/${id}/chat`}>
+            ถาม–ตอบกับ repo นี้
+          </a>
           <a className="text-accent underline underline-offset-4" href={`/a/${id}/report`}>
             สรุปตัวเลขทั้งหมด
           </a>

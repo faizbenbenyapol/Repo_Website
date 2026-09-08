@@ -55,6 +55,11 @@ export class ClaudeError extends Error {
   }
 }
 
+/** กุญแจที่ผิดคือเรื่องที่ลองใหม่กี่ครั้งก็ได้ผลเดิม ผู้เรียกควรหยุดทั้งงานทันทีแทนที่จะไล่ทำงานที่เหลือ */
+export function isAuthError(error: unknown): boolean {
+  return error instanceof ClaudeError && (error.status === 401 || error.status === 403);
+}
+
 /** ข้อความผิดพลาดจาก Anthropic เป็นภาษาอังกฤษ แปลงเป็นสิ่งที่ผู้ใช้ทำอะไรต่อได้ */
 export function explainStatus(status: number): string {
   if (status === 401 || status === 403) {

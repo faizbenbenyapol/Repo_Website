@@ -187,3 +187,110 @@ export function buildRepoPrompt(input: RepoPromptInput): string {
 
   return parts.join('\n');
 }
+
+export const QA_SYSTEM_PROMPT = [
+  'คุณตอบคำถามเกี่ยวกับ repo หนึ่งตัวให้คนที่กำลังอ่านโค้ดอยู่',
+  'คุณเห็นเฉพาะหลักฐานที่ถูกส่งมาให้เท่านั้น ไม่ได้เห็นซอร์สทั้ง repo',
+  'ถ้าหลักฐานที่ให้มาไม่พอจะตอบคำถามนี้ ให้บอกตรง ๆ ว่าไม่พอ อย่าเดาหรือแต่งเติม',
+  '',
+  GROUND_RULE,
+].join('\n');
+
+export interface EvidenceItem {
+  path: string;
+  line: number;
+  text: string;
+}
+
+export interface QaPromptInput {
+  question: string;
+  /** คำถามและคำตอบก่อนหน้าในบทสนทนาเดียวกัน ใช้ให้เข้าใจคำถามที่อ้างถึง "มัน" หรือ "ไฟล์นั้น" ได้ */
+  history: { question: string; answer: string }[];
+  evidence: EvidenceItem[];
+  digest: string | null;
+}
+
+export function buildQaPrompt(input: QaPromptInput): string {
+  const parts: string[] = [];
+
+  if (input.digest) {
+    parts.push(`ภาพรวมของ repo นี้: ${input.digest}`, '');
+  }
+
+  if (input.history.length > 0) {
+    parts.push('บทสนทนาก่อนหน้า:');
+    for (const turn of input.history) {
+      parts.push(`- ถาม: ${turn.question}`, `  ตอบ: ${turn.answer}`);
+    }
+    parts.push('');
+  }
+
+  parts.push(
+    'หลักฐานที่ค้นเจอเกี่ยวข้องกับคำถามนี้:',
+    input.evidence.length > 0
+      ? input.evidence.map((item) => `- ${item.path}:${item.line} — ${item.text}`).join('\n')
+      : '- ไม่พบหลักฐานที่ตรงกับคำถามนี้เลย',
+    '',
+    `คำถาม: ${input.question}`,
+    '',
+    'ตอบเป็น JSON รูปนี้:',
+    '{"claims":[{"text":"ส่วนหนึ่งของคำตอบ","refs":[{"path":"...","line":1}]}]}',
+    'แบ่งคำตอบเป็นข้อย่อยได้หลายข้อถ้าจำเป็น ไม่เกิน 6 ข้อ',
+    'refs ต้องเป็นพาธและบรรทัดที่ปรากฏในหลักฐานข้างบนเท่านั้น',
+    'ถ้าหลักฐานไม่พอจะตอบ ให้ส่ง claims เป็นรายการว่างแทนการเดา',
+  );
+
+  return parts.join('\n');
+}
+
+export const READING_PATH_SYSTEM_PROMPT = [
+  'คุณกำลังเขียนคำแนะนำให้คนที่เพิ่งเห็น repo นี้ครั้งแรกว่าควรอ่านไฟล์ไหนก่อน-หลัง',
+  'ลำดับไฟล์ถูกจัดมาให้แล้วตามความสัมพันธ์ในโค้ดจริง หน้าที่ของคุณคืออธิบายแต่ละขั้นเท่านั้น',
+  'ไม่ต้องเปลี่ยนลำดับหรือเพิ่มไฟล์ใหม่',
+  '',
+  GROUND_RULE,
+].join('\n');
+
+export interface ReadingStepInput {
+  path: string;
+  language: string | null;
+  loc: number;
+  dependents: number;
+  dependencies: number;
+  symbols: { name: string; kind: string; line: number }[];
+  /** หัวเรื่องจากคำอธิบายที่สรุปไว้แล้ว ถ้ามี ใช้ช่วยให้อธิบายแม่นขึ้นโดยไม่ต้องอ่านซอร์สใหม่ */
+  summary: string | null;
+}
+
+export function buildReadingPathPrompt(steps: ReadingStepInput[]): string {
+  const listing = steps
+    .map((step, index) => {
+      const symbols =
+        step.symbols.length > 0
+          ? step.symbols
+              .map((symbol) => `บรรทัด ${symbol.line}: ${symbol.kind} ${symbol.name}`)
+              .join(', ')
+          : 'ไม่พบฟังก์ชันหรือคลาสที่ประกาศไว้';
+
+      return [
+        `ขั้นที่ ${index + 1}: ${step.path}`,
+        `  ภาษา: ${step.language ?? 'ไม่ทราบ'} · ${step.loc} บรรทัด · ถูกพึ่งพา ${step.dependents} ไฟล์ · พึ่งพา ${step.dependencies} ไฟล์`,
+        step.summary ? `  สรุปที่มีอยู่แล้ว: ${step.summary}` : null,
+        `  ประกาศไว้: ${symbols}`,
+      ]
+        .filter((line): line is string => line !== null)
+        .join('\n');
+    })
+    .join('\n\n');
+
+  return [
+    `ไฟล์ทั้งหมด ${steps.length} ไฟล์ เรียงลำดับที่ควรอ่านมาให้แล้ว:`,
+    '',
+    listing,
+    '',
+    'ตอบเป็น JSON รูปนี้ โดยมีสมาชิกในอาร์เรย์ steps เท่ากับจำนวนไฟล์ข้างบนและเรียงลำดับเดียวกันทุกประการ:',
+    '{"steps":[{"why":[{"text":"ทำไมต้องอ่านไฟล์นี้ตอนนี้","refs":[{"path":"...","line":1}]}],' +
+      '"lookFor":[{"text":"สิ่งที่ควรสังเกตในไฟล์นี้","refs":[{"path":"...","line":1}]}]}]}',
+    'แต่ละหมวดใส่ได้ 1-2 ข้อ refs ต้องเป็นไฟล์และบรรทัดที่ปรากฏในรายการข้างบนเท่านั้น',
+  ].join('\n');
+}

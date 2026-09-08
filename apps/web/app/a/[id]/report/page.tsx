@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { DigestPanel, ModuleList } from '../../../../components/comprehension/digest-panel';
-import { getComprehension } from '../../../api-client';
+import { ReadingPathPanel } from '../../../../components/reading-path/reading-path-panel';
+import { getComprehension, getReadingPath, getSession } from '../../../api-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -154,12 +155,15 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
     );
   }
 
-  const [findingsResponse, blastResponse, edgesResponse, comprehension] = await Promise.all([
-    load<{ findings: Finding[] }>(`/api/analyses/${id}/findings`),
-    load<{ files: RankedFile[] }>(`/api/analyses/${id}/ranked?by=blast&limit=10`),
-    load<{ edges: unknown[] }>(`/api/analyses/${id}/edges`),
-    getComprehension(id),
-  ]);
+  const [findingsResponse, blastResponse, edgesResponse, comprehension, sessionData, readingPath] =
+    await Promise.all([
+      load<{ findings: Finding[] }>(`/api/analyses/${id}/findings`),
+      load<{ files: RankedFile[] }>(`/api/analyses/${id}/ranked?by=blast&limit=10`),
+      load<{ edges: unknown[] }>(`/api/analyses/${id}/edges`),
+      getComprehension(id),
+      getSession(),
+      getReadingPath(id),
+    ]);
 
   const totals = analysis.totals;
   const metrics = analysis.metrics;
@@ -229,6 +233,20 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           </div>
         </section>
       ) : null}
+
+      <section className="mt-14">
+        <div className="flex items-baseline gap-4">
+          <p className="label">เส้นทางอ่านโค้ดสำหรับคนใหม่</p>
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <div className="mt-6">
+          <ReadingPathPanel
+            analysisId={id}
+            initialPath={readingPath?.path ?? null}
+            session={sessionData?.session ?? null}
+          />
+        </div>
+      </section>
 
       {metrics ? (
         <section className="mt-10">

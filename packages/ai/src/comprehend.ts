@@ -10,7 +10,7 @@ import {
 } from '@repolens/shared';
 import {
   askClaude,
-  ClaudeError,
+  isAuthError,
   type AskOptions,
   type AskReply,
   type AskRequest,
@@ -128,9 +128,7 @@ export function moduleOf(path: string): string {
 }
 
 /** กุญแจที่ผิดคือเรื่องที่ลองใหม่กี่ครั้งก็ได้ผลเดิม ต้องหยุดทั้งงานทันทีแทนที่จะไล่เรียกจนครบทุกไฟล์ */
-function isFatal(error: unknown): boolean {
-  return error instanceof ClaudeError && (error.status === 401 || error.status === 403);
-}
+const isFatal = isAuthError;
 
 const KIND_LABELS: Record<string, string> = {
   function: 'ฟังก์ชัน',

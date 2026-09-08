@@ -322,6 +322,10 @@ export interface FileForSummary {
   parsed: boolean;
   skipReason: string | null;
   dependents: number;
+  /** จำนวนคอมมิตที่แตะไฟล์นี้ — ใช้เลือกไฟล์เด่นสำหรับเส้นทางอ่านโค้ดด้วย */
+  churn: number;
+  /** จำนวนไฟล์ที่ได้รับผลกระทบถ้าแก้ไฟล์นี้ */
+  blast: number;
 }
 
 export async function listFilesForSummary(sql: Db, analysisId: string): Promise<FileForSummary[]> {
@@ -334,9 +338,11 @@ export async function listFilesForSummary(sql: Db, analysisId: string): Promise<
       parsed: boolean;
       skip_reason: string | null;
       dependents: number;
+      churn: number;
+      blast: number;
     }[]
   >`
-    select path, language, loc, bytes, parsed, skip_reason, dependents
+    select path, language, loc, bytes, parsed, skip_reason, dependents, churn, blast
     from files where analysis_id = ${analysisId}
     order by dependents desc, path asc
   `;
@@ -349,5 +355,7 @@ export async function listFilesForSummary(sql: Db, analysisId: string): Promise<
     parsed: row.parsed,
     skipReason: row.skip_reason,
     dependents: row.dependents,
+    churn: row.churn,
+    blast: row.blast,
   }));
 }

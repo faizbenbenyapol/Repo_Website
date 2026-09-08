@@ -4,6 +4,8 @@ import type {
   ComprehensionRun,
   Feature,
   ModuleSummary,
+  QaMessage,
+  ReadingPath,
   ReleaseNote,
   RepoDigest,
   SessionState,
@@ -55,4 +57,14 @@ export interface ComprehensionView {
 
 export function getComprehension(analysisId: string): Promise<ComprehensionView | null> {
   return get<ComprehensionView>(`/api/analyses/${analysisId}/comprehension`, { withSession: true });
+}
+
+export function getQaHistory(analysisId: string): Promise<{ messages: QaMessage[] } | null> {
+  return get<{ messages: QaMessage[] }>(`/api/analyses/${analysisId}/ask`, { withSession: true });
+}
+
+export function getReadingPath(analysisId: string): Promise<{ path: ReadingPath | null } | null> {
+  return get<{ path: ReadingPath | null }>(`/api/analyses/${analysisId}/reading-path`, {
+    withSession: true,
+  });
 }

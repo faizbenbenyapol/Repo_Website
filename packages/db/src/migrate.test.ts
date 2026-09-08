@@ -22,6 +22,12 @@ const connections: Db[] = [];
 beforeAll(async () => {
   root = createDb(url);
   await root.unsafe(`create schema "${schema}"`);
+
+  // ติดตั้ง pg_trgm ไว้ที่ public ให้แน่ใจก่อนเสมอ (v0.6.0 เพิ่ม extension นี้เข้ามาใน migration)
+  // ไม่งั้นถ้าเป็นเทสต์แรกที่แตะฐานข้อมูลนี้ migration ที่แข่งกันอาจติดตั้งมันลงในสคีมาชั่วคราวของ
+  // เทสต์นี้เอง แล้วโดนลบทิ้งไปพร้อมกับ `drop schema ... cascade` ตอนจบเทสต์ ซึ่งกระทบไฟล์ทดสอบอื่น
+  // ที่รันพร้อมกันและอาศัย pg_trgm อยู่เหมือนกัน
+  await root.unsafe('create extension if not exists pg_trgm with schema public');
 }, 60_000);
 
 afterAll(async () => {
@@ -34,7 +40,10 @@ function isolated(): Db {
   const connection = postgres(url as string, {
     max: 5,
     onnotice: () => {},
-    connection: { search_path: schema },
+    // ต้องมี public ต่อท้ายเสมอ เพราะ extension อย่าง pg_trgm (v0.6.0) ติดตั้งแบบทั้งฐานข้อมูลครั้งเดียว
+    // ถ้าติดตั้งไปแล้วจากสคีมาอื่นในเทสต์ก่อนหน้า opclass ของมันจะอยู่ที่ public
+    // สคีมาแยกของเทสต์นี้ต้องมองเห็น public ด้วย ไม่งั้นสร้างดัชนีที่ใช้ opclass นั้นไม่ได้
+    connection: { search_path: `${schema},public` },
   });
   connections.push(connection);
   return connection;

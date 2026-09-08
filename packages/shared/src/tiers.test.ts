@@ -15,7 +15,7 @@ describe('ระดับการใช้งาน', () => {
   });
 
   it('ฟีเจอร์ที่ยังไม่ปล่อยยังใช้ไม่ได้แม้เป็นสมาชิก', () => {
-    expect(isAvailable('ask-repo', 'member')).toBe(false);
+    expect(isAvailable('thai-report', 'member')).toBe(false);
     expect(isAvailable('ไม่มีอยู่จริง', 'member')).toBe(false);
   });
 

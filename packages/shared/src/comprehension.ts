@@ -141,3 +141,33 @@ export function keepGrounded(claims: Claim[], isReal: (citation: Citation) => bo
     .map((claim) => ({ ...claim, citations: claim.citations.filter(isReal) }))
     .filter((claim) => claim.citations.length > 0);
 }
+
+/**
+ * ถาม–ตอบกับ repo และเส้นทางอ่านโค้ด (v0.6.0)
+ * ทั้งสองใช้โมเดลระดับเดียวกัน — งานสังเคราะห์คำตอบจากหลักฐานที่ให้มา ไม่ใช่งานสรุปเดี่ยวหรือภาพรวมทั้ง repo
+ */
+export const QA_MODEL = 'claude-sonnet-5';
+export const READING_PATH_MODEL = 'claude-sonnet-5';
+
+export interface QaMessage {
+  id: string;
+  analysisId: string;
+  question: string;
+  claims: Claim[];
+  model: string | null;
+  createdAt: string;
+}
+
+export interface ReadingPathStep {
+  path: string;
+  /** ลำดับที่ควรอ่าน เริ่มที่ 1 */
+  order: number;
+  why: Claim[];
+  lookFor: Claim[];
+}
+
+export interface ReadingPath {
+  steps: ReadingPathStep[];
+  model: string | null;
+  createdAt: string;
+}
