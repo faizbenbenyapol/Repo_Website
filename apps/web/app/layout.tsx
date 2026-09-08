@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
+import { SessionNav } from '../components/session-nav';
 import { VersionChip } from '../components/version-chip';
 import './globals.css';
+
+// แถบบนอ่านสถานะการล็อกอินจากคุกกี้ของคำขอ จึงเรนเดอร์ล่วงหน้าตอน build ไม่ได้
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: 'RepoLens — อ่านโค้ดทั้ง repo ให้เข้าใจ',
@@ -29,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <a className="transition-colors hover:text-accent" href="/versions">
                 ประวัติเวอร์ชัน
               </a>
+              <SessionNav />
               <a
                 className="transition-colors hover:text-accent"
                 href="https://github.com/braedonsaunders/codeflow"

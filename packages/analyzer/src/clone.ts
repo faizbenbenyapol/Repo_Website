@@ -16,6 +16,11 @@ export interface CloneOptions {
   /** ความลึกของประวัติที่ดึงมา — v0.2.0 ใช้แค่คอมมิตล่าสุด */
   depth?: number;
   parentDir?: string;
+  /**
+   * คอมมิตที่ต้องการอ่าน ใช้ตอนกลับมาอ่านซอร์สของผลวิเคราะห์เดิม
+   * ถ้าดึงคอมมิตนั้นมาไม่ได้ จะใช้คอมมิตล่าสุดของสาขาแทนแล้วบอกกลับมาว่าได้อันไหนจริง
+   */
+  checkout?: string;
 }
 
 class CommandError extends Error {
@@ -88,6 +93,35 @@ function explain(stderr: string): string {
 }
 
 /**
+ * ย้ายไปยังคอมมิตที่ระบุ
+ *
+ * โคลนแบบตื้นมาเฉพาะปลายสาขา คอมมิตเก่าจึงยังไม่อยู่ในเครื่อง ต้องดึงมาเพิ่มทีละอัน
+ * ถ้าผู้ให้บริการไม่ยอมให้ดึงตาม SHA หรือคอมมิตนั้นหายไปแล้ว ให้อ่านปลายสาขาต่อไป
+ * เพราะได้คำอธิบายจากโค้ดที่ใหม่กว่ายังดีกว่าไม่ได้อะไรเลย ตราบใดที่บอกผู้ใช้ตามตรงว่าอ่านอันไหน
+ */
+async function checkoutCommit(dir: string, commit: string, timeoutMs: number): Promise<void> {
+  const head = await run('git', ['rev-parse', 'HEAD'], { cwd: dir, timeoutMs: 15_000 });
+  if (head === commit) return;
+
+  try {
+    await run('git', ['fetch', '--depth', '1', '--quiet', 'origin', commit], {
+      cwd: dir,
+      timeoutMs,
+    });
+    await run(
+      'git',
+      ['-c', 'advice.detachedHead=false', 'checkout', '--quiet', '--detach', 'FETCH_HEAD'],
+      {
+        cwd: dir,
+        timeoutMs: 30_000,
+      },
+    );
+  } catch {
+    // ปล่อยให้อยู่ที่ปลายสาขาต่อไป ผู้เรียกจะเห็นจาก commitSha ที่คืนไปว่าไม่ได้คอมมิตที่ขอ
+  }
+}
+
+/**
  * โคลนแบบตื้นลงโฟลเดอร์ชั่วคราว
  * ปิด symlink ของ git ไว้ เพราะ repo ที่ไม่น่าไว้ใจใช้ลิงก์ชี้ออกนอกโฟลเดอร์ได้
  */
@@ -130,6 +164,8 @@ export async function cloneRepo(ref: RepoRef, options: CloneOptions = {}): Promi
       ],
       { timeoutMs },
     );
+
+    if (options.checkout) await checkoutCommit(dir, options.checkout, timeoutMs);
 
     const commitSha = await run('git', ['rev-parse', 'HEAD'], { cwd: dir, timeoutMs: 15_000 });
     const branch = await run('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {

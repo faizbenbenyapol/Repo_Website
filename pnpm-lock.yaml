@@ -29,6 +29,9 @@ importers:
       '@fastify/cors':
         specifier: ^10.0.1
         version: 10.1.0
+      '@repolens/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@repolens/analyzer':
         specifier: workspace:*
         version: link:../../packages/analyzer
@@ -109,6 +112,9 @@ importers:
 
   apps/worker:
     dependencies:
+      '@repolens/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@repolens/analyzer':
         specifier: workspace:*
         version: link:../../packages/analyzer
@@ -134,6 +140,25 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
+
+  packages/ai:
+    dependencies:
+      '@repolens/shared':
+        specifier: workspace:*
+        version: link:../shared
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
 
   packages/analyzer:
     dependencies:

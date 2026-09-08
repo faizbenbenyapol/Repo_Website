@@ -17,6 +17,7 @@ import {
   getSymbols,
 } from '@repolens/db';
 import { config } from '../config.js';
+import { RateLimiter } from '../rate-limit.js';
 import type { Services } from '../services.js';
 
 const createBody = z.object({
@@ -27,34 +28,8 @@ const createBody = z.object({
 
 const idParam = z.object({ id: z.string().uuid('รหัสงานวิเคราะห์ไม่ถูกต้อง') });
 
-/** จำกัดจำนวนงานต่อหนึ่งที่อยู่ IP — การโคลน repo กินทรัพยากรจริง จึงเปิดให้ยิงรัวไม่ได้ */
-class RateLimiter {
-  private readonly hits = new Map<string, number[]>();
-
-  constructor(
-    private readonly limit: number,
-    private readonly windowMs: number,
-  ) {}
-
-  check(key: string): { allowed: boolean; retryAfterSeconds: number } {
-    const now = Date.now();
-    const recent = (this.hits.get(key) ?? []).filter((at) => now - at < this.windowMs);
-
-    if (recent.length >= this.limit) {
-      const oldest = recent[0] ?? now;
-      return {
-        allowed: false,
-        retryAfterSeconds: Math.ceil((this.windowMs - (now - oldest)) / 1000),
-      };
-    }
-
-    recent.push(now);
-    this.hits.set(key, recent);
-    return { allowed: true, retryAfterSeconds: 0 };
-  }
-}
-
 export function analysisRoutes(services: Services) {
+  // การโคลน repo กินทรัพยากรจริง จึงเปิดให้ยิงรัวจากที่อยู่เดียวไม่ได้
   const limiter = new RateLimiter(
     Number(process.env.ANALYSIS_RATE_LIMIT ?? 10),
     Number(process.env.ANALYSIS_RATE_WINDOW_MS ?? 60_000),
@@ -72,6 +47,15 @@ export function analysisRoutes(services: Services) {
       const parsed = parseRepoRef(body.data.input, { allowLocal: config.allowLocalRepos });
       if (!parsed.ok) return reply.status(400).send({ error: parsed.error });
 
+      // ดูแคชก่อนหักโควตา เพราะโควตานี้มีไว้กันการโคลนซ้ำ ๆ ไม่ใช่กันการอ่านผลที่มีอยู่แล้ว
+      // คำขอที่จบลงด้วยการคืนผลเดิมไม่ได้ทำให้เครื่องทำงานหนักขึ้นเลย จึงไม่ควรกินโควตาของใคร
+      if (!body.data.refresh) {
+        const cached = await findCachedAnalysis(services.sql, parsed.ref, ANALYZER_SCHEMA);
+        if (cached) {
+          return reply.status(200).send({ id: cached.id, cached: true, status: cached.status });
+        }
+      }
+
       const gate = limiter.check(request.ip);
       if (!gate.allowed) {
         return reply
@@ -80,13 +64,6 @@ export function analysisRoutes(services: Services) {
           .send({
             error: `สั่งวิเคราะห์ถี่เกินไป ลองใหม่อีกครั้งใน ${gate.retryAfterSeconds} วินาที`,
           });
-      }
-
-      if (!body.data.refresh) {
-        const cached = await findCachedAnalysis(services.sql, parsed.ref, ANALYZER_SCHEMA);
-        if (cached) {
-          return reply.status(200).send({ id: cached.id, cached: true, status: cached.status });
-        }
       }
 
       const id = await createAnalysis(services.sql, {

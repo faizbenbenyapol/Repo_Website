@@ -13,5 +13,6 @@
 - **หลังบ้าน** Fastify 5 · Zod · Server-Sent Events · BullMQ
 - **ข้อมูล** PostgreSQL 17 + pgvector · Redis 7
 - **วิเคราะห์โค้ด** web-tree-sitter (WebAssembly)
-- **AI** Claude API (`claude-opus-5`) · โมเดลเวกเตอร์ bge-m3 บน ONNX Runtime
+- **AI** Claude API — `claude-opus-5` สำหรับภาพรวมทั้ง repo, `claude-sonnet-5` รายโมดูล
+  และ `claude-haiku-4-5` รายไฟล์ · โมเดลเวกเตอร์ bge-m3 บน ONNX Runtime
 - **โครงสร้างพื้นฐาน** Docker · Docker Compose · Caddy 2 · GitHub Actions

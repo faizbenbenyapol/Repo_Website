@@ -21,8 +21,12 @@ const HOP_BY_HOP = new Set([
 function forwardHeaders(source: Headers): Headers {
   const headers = new Headers();
   source.forEach((value, key) => {
+    // set-cookie ถูกจัดการแยกด้านล่าง เพราะการรวมหลายใบเป็นค่าเดียวทำให้เบราว์เซอร์อ่านไม่ออก
+    if (key.toLowerCase() === 'set-cookie') return;
     if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value);
   });
+
+  for (const cookie of source.getSetCookie?.() ?? []) headers.append('set-cookie', cookie);
   return headers;
 }
 

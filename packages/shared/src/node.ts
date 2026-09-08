@@ -1,3 +1,6 @@
+export * from './crypto.js';
+export * from './keystore.js';
+
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseReleaseNote, sortReleases, type ReleaseNote } from './changelog.js';

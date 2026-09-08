@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { FileSummary } from '@repolens/shared';
 import type { FileDetail, GraphNode } from '../../lib/graph-view';
+import { Claims } from '../comprehension/claims';
 
 interface Props {
   analysisId: string;
   node: GraphNode | null;
   onSelect: (path: string) => void;
+  /** เปิดให้ดึงคำอธิบายภาษาไทยเฉพาะเมื่อผู้ใช้มีสิทธิ์เห็น จะได้ไม่ยิงคำขอที่รู้อยู่แล้วว่าได้ค่าว่าง */
+  aiEnabled: boolean;
 }
 
 const KIND_LABELS: Record<string, string> = {
@@ -59,9 +63,27 @@ function PathList({
  * โหลดข้อมูลเชิงลึกเมื่อผู้ใช้เลือกไฟล์เท่านั้น ไม่ดึงมาล่วงหน้าทั้ง repo
  * เพราะ repo ใหญ่มี symbol เป็นแสนรายการ ซึ่งไม่มีใครดูพร้อมกันทีเดียวอยู่แล้ว
  */
-export function Inspector({ analysisId, node, onSelect }: Props) {
+export function Inspector({ analysisId, node, onSelect, aiEnabled }: Props) {
   const [detail, setDetail] = useState<FileDetail | null>(null);
+  const [summary, setSummary] = useState<FileSummary | null>(null);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!node || !aiEnabled) {
+      setSummary(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    fetch(`/api/analyses/${analysisId}/files/summary?path=${encodeURIComponent(node.path)}`, {
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { summary: FileSummary | null } | null) => setSummary(body?.summary ?? null))
+      .catch(() => setSummary(null));
+
+    return () => controller.abort();
+  }, [aiEnabled, analysisId, node]);
 
   useEffect(() => {
     if (!node) {
@@ -129,6 +151,19 @@ export function Inspector({ analysisId, node, onSelect }: Props) {
           ) : null}
         </dl>
       </div>
+
+      {summary ? (
+        <section>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <p className="label">ไฟล์นี้ทำอะไร</p>
+            {summary.source === 'analyzer' ? (
+              <span className="font-mono text-[10.5px] text-brass">จากโครงสร้าง</span>
+            ) : null}
+          </div>
+          <p className="mt-2 text-sm">{summary.headline}</p>
+          <Claims claims={summary.points} onSelect={onSelect} />
+        </section>
+      ) : null}
 
       {loading ? <p className="text-sm text-faint">กำลังโหลดรายละเอียด…</p> : null}
 

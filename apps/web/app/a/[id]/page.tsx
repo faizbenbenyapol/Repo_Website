@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { ComprehendPanel } from '../../../components/comprehension/comprehend-panel';
 import { Explorer } from '../../../components/explorer/explorer';
 import type { GraphData } from '../../../lib/graph-view';
+import { getComprehension, getSession } from '../../api-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,12 +66,15 @@ export default async function ExplorerPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  const graph = (await load<GraphData>(`/api/analyses/${id}/graph`)) ?? {
-    nodes: [],
-    edges: [],
-    truncated: false,
-    totalNodes: 0,
-  };
+  const [graph, sessionData, comprehension] = await Promise.all([
+    load<GraphData>(`/api/analyses/${id}/graph`),
+    getSession(),
+    getComprehension(id),
+  ]);
+
+  const graphData = graph ?? { nodes: [], edges: [], truncated: false, totalNodes: 0 };
+  const session = sessionData?.session ?? null;
+  const digest = comprehension?.digest ?? null;
 
   return (
     <div className="rise pt-12">
@@ -93,13 +98,25 @@ export default async function ExplorerPage({ params }: { params: Promise<{ id: s
         </div>
       </div>
 
-      <p className="mt-4 max-w-[70ch] text-sm text-muted">
-        แต่ละจุดคือหนึ่งไฟล์ เส้นคือการที่ไฟล์หนึ่งเรียกใช้อีกไฟล์ ยิ่งจุดใหญ่ยิ่งมีโค้ดมาก
-        กลุ่มก้อนที่เกาะกันแน่นมักเป็นโมดูลเดียวกัน ส่วนจุดที่โดดเดี่ยวคือไฟล์ที่ไม่มีใครเรียกใช้
-      </p>
+      {digest ? (
+        <p className="mt-4 max-w-[70ch] text-[15px]">{digest.headline}</p>
+      ) : (
+        <p className="mt-4 max-w-[70ch] text-sm text-muted">
+          แต่ละจุดคือหนึ่งไฟล์ เส้นคือการที่ไฟล์หนึ่งเรียกใช้อีกไฟล์ ยิ่งจุดใหญ่ยิ่งมีโค้ดมาก
+          กลุ่มก้อนที่เกาะกันแน่นมักเป็นโมดูลเดียวกัน ส่วนจุดที่โดดเดี่ยวคือไฟล์ที่ไม่มีใครเรียกใช้
+        </p>
+      )}
 
       <div className="mt-6">
-        <Explorer analysisId={id} data={graph} />
+        <ComprehendPanel
+          analysisId={id}
+          run={comprehension?.comprehension ?? null}
+          session={session}
+        />
+      </div>
+
+      <div className="mt-4">
+        <Explorer aiEnabled={session?.aiEnabled ?? false} analysisId={id} data={graphData} />
       </div>
     </div>
   );

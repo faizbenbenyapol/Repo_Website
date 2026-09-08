@@ -24,8 +24,10 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    volumes:
-      - redisdata:/data
+    # เก็บทุกอย่างในหน่วยความจำเท่านั้น ไม่เขียนลงดิสก์
+    # เพราะกุญแจของสมาชิกอยู่ใน Redis และเราสัญญาไว้ว่ามันจะไม่ลงดิสก์ (ADR 0002)
+    # ผลข้างเคียงคืองานที่ยังค้างคิวอยู่จะหายเมื่อ Redis ถูกรีสตาร์ต ซึ่งสั่งวิเคราะห์ใหม่ได้
+    command: ['redis-server', '--save', '', '--appendonly', 'no']
     healthcheck:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
@@ -39,6 +41,7 @@ services:
       <<: *data-env
       NODE_ENV: production
       LOG_LEVEL: info
+      SESSION_SECRET: ${SESSION_SECRET:?ต้องตั้ง SESSION_SECRET ก่อนเปิดบริการ}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -61,6 +64,9 @@ services:
       NODE_ENV: production
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       MAX_FILES: ${MAX_FILES:-50000}
+      SESSION_SECRET: ${SESSION_SECRET:?ต้องตั้ง SESSION_SECRET ก่อนเปิดบริการ}
+      COMPREHENSION_CONCURRENCY: ${COMPREHENSION_CONCURRENCY:-1}
+      COMPREHEND_MAX_FILES: ${COMPREHEND_MAX_FILES:-400}
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -103,6 +109,5 @@ services:
 
 volumes:
   pgdata:
-  redisdata:
   caddy-data:
   caddy-config:

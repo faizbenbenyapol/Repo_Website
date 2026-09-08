@@ -9,6 +9,7 @@ import { Inspector } from './inspector';
 interface Props {
   analysisId: string;
   data: GraphData;
+  aiEnabled: boolean;
 }
 
 /**
@@ -17,7 +18,7 @@ interface Props {
  * ทั้งสามส่วนแชร์สิ่งที่เลือกอยู่ตัวเดียวกัน เลือกจากที่ไหนก็ตาม อีกสองส่วนต้องตามไปด้วยเสมอ
  * เพราะสิ่งที่ทำให้เข้าใจโค้ดคือการเห็นของเดียวกันจากหลายมุมพร้อมกัน
  */
-export function Explorer({ analysisId, data }: Props) {
+export function Explorer({ analysisId, data, aiEnabled }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [colorMode, setColorMode] = useState<ColorMode>('folder');
   const [query, setQuery] = useState('');
@@ -111,6 +112,7 @@ export function Explorer({ analysisId, data }: Props) {
 
         <div className="panel h-[560px] overflow-y-auto">
           <Inspector
+            aiEnabled={aiEnabled}
             analysisId={analysisId}
             node={selected ? (byPath.get(selected) ?? null) : null}
             onSelect={select}

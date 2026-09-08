@@ -70,7 +70,7 @@ export const FEATURES: Feature[] = [
     name: 'คะแนนสุขภาพและตัวชี้วัด',
     detail: 'เกรด A–F จากโค้ดตาย วงจรพึ่งพา ความผูกกันแน่น และช่องโหว่ที่พบ',
     tier: 'visitor',
-    status: 'planned',
+    status: 'shipped',
     since: '0.4.0',
   },
   {
@@ -78,7 +78,7 @@ export const FEATURES: Feature[] = [
     name: 'รัศมีผลกระทบ',
     detail: 'ถ้าแก้ไฟล์นี้ ไฟล์ไหนได้รับผลกระทบบ้าง',
     tier: 'visitor',
-    status: 'planned',
+    status: 'shipped',
     since: '0.4.0',
   },
   {
@@ -86,7 +86,7 @@ export const FEATURES: Feature[] = [
     name: 'ส่งออกผลวิเคราะห์เป็น JSON',
     detail: 'เอาไปต่อยอดในเครื่องมืออื่นหรือใน CI ของคุณเองได้',
     tier: 'visitor',
-    status: 'planned',
+    status: 'shipped',
     since: '0.4.0',
   },
   {
@@ -94,7 +94,7 @@ export const FEATURES: Feature[] = [
     name: 'สรุป repo เป็นภาษาไทย',
     detail: 'โปรเจกต์นี้ทำอะไร ใช้อะไร จุดเริ่มโปรแกรมอยู่ไหน รันอย่างไร',
     tier: 'member',
-    status: 'planned',
+    status: 'shipped',
     since: '0.5.0',
   },
   {
@@ -102,7 +102,15 @@ export const FEATURES: Feature[] = [
     name: 'คำอธิบายรายไฟล์',
     detail: 'ทุกไฟล์มีสรุปภาษาไทยสั้น ๆ ว่าไฟล์นี้รับผิดชอบอะไร',
     tier: 'member',
-    status: 'planned',
+    status: 'shipped',
+    since: '0.5.0',
+  },
+  {
+    id: 'module-summary',
+    name: 'คำอธิบายรายโมดูล',
+    detail: 'แต่ละโฟลเดอร์รับผิดชอบอะไร และประกอบกันเป็นสถาปัตยกรรมแบบไหน',
+    tier: 'member',
+    status: 'shipped',
     since: '0.5.0',
   },
   {
@@ -145,6 +153,8 @@ export function isAvailable(featureId: string, tier: Tier): boolean {
 export const sessionStateSchema = z.object({
   tier: tierSchema,
   signedIn: z.boolean(),
+  /** อีเมลของสมาชิกที่ล็อกอินอยู่ — null เมื่อยังไม่ได้ล็อกอิน */
+  email: z.string().nullable(),
   /** สี่ตัวท้ายของ API key ที่ผูกไว้ — ไม่มีทางส่งกุญแจเต็มกลับมาหน้าบ้าน */
   apiKeyHint: z.string().nullable(),
   aiEnabled: z.boolean(),
@@ -157,6 +167,7 @@ export type SessionState = z.infer<typeof sessionStateSchema>;
 export const ANONYMOUS_SESSION: SessionState = {
   tier: 'visitor',
   signedIn: false,
+  email: null,
   apiKeyHint: null,
   aiEnabled: false,
   aiBlockedReason: 'ล็อกอินแล้วใส่ API key ของคุณเองเพื่อเปิดคำอธิบายและการถาม–ตอบด้วย AI',

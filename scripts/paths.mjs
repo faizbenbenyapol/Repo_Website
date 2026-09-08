@@ -7,6 +7,7 @@ export const CHANGELOG_FILE = join(ROOT, 'CHANGELOG.md');
 export const ROOT_PACKAGE = join(ROOT, 'package.json');
 export const WORKSPACE_PACKAGES = [
   join(ROOT, 'packages', 'shared', 'package.json'),
+  join(ROOT, 'packages', 'ai', 'package.json'),
   join(ROOT, 'packages', 'analyzer', 'package.json'),
   join(ROOT, 'packages', 'db', 'package.json'),
   join(ROOT, 'apps', 'api', 'package.json'),

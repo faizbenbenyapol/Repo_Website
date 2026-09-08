@@ -17,6 +17,7 @@ ENV PNPM_HOME="/root/.local/share/pnpm" \
 FROM base AS deps
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 COPY packages/shared/package.json packages/shared/
+COPY packages/ai/package.json packages/ai/
 COPY packages/analyzer/package.json packages/analyzer/
 COPY packages/db/package.json packages/db/
 COPY apps/api/package.json apps/api/
@@ -33,6 +34,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 FROM deps AS source
 COPY . .
 RUN pnpm --filter @repolens/shared build \
+    && pnpm --filter @repolens/ai build \
     && pnpm --filter @repolens/analyzer build \
     && pnpm --filter @repolens/db build
 
