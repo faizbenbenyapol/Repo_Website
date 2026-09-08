@@ -1,10 +1,25 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useCallback, useMemo, useState } from 'react';
 import { COLOR_MODES, legendFor, type ColorMode, type GraphData } from '../../lib/graph-view';
-import { DependencyGraph } from './dependency-graph';
 import { FileTree } from './file-tree';
 import { Inspector } from './inspector';
+
+// sigma เรียก WebGL2RenderingContext ตอนโหลดโมดูล ซึ่งไม่มีอยู่บนฝั่งเซิร์ฟเวอร์เลย
+// แม้ dependency-graph.tsx จะมี 'use client' แล้วก็ตาม Next.js ยัง SSR คอมโพเนนต์ client
+// รอบแรกอยู่ดี ต้องปิด ssr ตรงนี้เพื่อไม่ให้โมดูลของ sigma ถูกโหลดขึ้นมาบนเซิร์ฟเวอร์เลย
+const DependencyGraph = dynamic(
+  () => import('./dependency-graph').then((mod) => mod.DependencyGraph),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center text-sm text-faint">
+        กำลังโหลดกราฟ…
+      </div>
+    ),
+  },
+);
 
 interface Props {
   analysisId: string;

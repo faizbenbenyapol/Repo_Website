@@ -40,24 +40,32 @@ export const COLOR_MODES = [
 
 export type ColorMode = (typeof COLOR_MODES)[number]['id'];
 
-/**
- * จานสีสำหรับแยกกลุ่ม เลือกโทนกลาง ๆ ที่อ่านออกทั้งบนพื้นสว่างและพื้นมืด
- * ไม่ใช้สีเน้นของระบบ เพราะสีเน้นมีความหมายว่า "สิ่งที่เลือกอยู่"
- */
-const PALETTE = [
-  '#4C7DD9',
-  '#2F9E76',
-  '#C2843A',
-  '#9B62C4',
-  '#3E9AA8',
-  '#C25E6E',
-  '#7A8B45',
-  '#8A6FB0',
-  '#C08A2E',
-  '#5E8F8F',
-];
+function readColorToken(name: string, fallback: string): string {
+  if (typeof window === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
 
-const NEUTRAL = '#8B94A8';
+/**
+ * จานสีสำหรับแยกกลุ่ม อ่านจากโทเค็นดีไซน์ (--color-cat-*) แทนการเขียนค่าสีตรง ๆ
+ * เพื่อให้กราฟตามธีมสว่าง/มืดโดยอัตโนมัติ และไม่ใช้สีเน้นของระบบ เพราะสีเน้นมีความหมายว่า
+ * "สิ่งที่เลือกอยู่" — จานนี้ตั้งใจเลือกโทนมิวเต็ดใกล้เคียงกัน ไม่มีสีไหนสว่างจนแย่งความสนใจ
+ */
+function palette(): string[] {
+  return [
+    readColorToken('--color-cat-assets', '#4f7d67'),
+    readColorToken('--color-cat-models', '#a8822f'),
+    readColorToken('--color-cat-views', '#0a6478'),
+    readColorToken('--color-cat-controllers', '#7d5270'),
+    readColorToken('--color-cat-sql', '#4f6486'),
+    readColorToken('--color-cat-core', '#6b7280'),
+    readColorToken('--color-cat-scripts', '#995a56'),
+  ];
+}
+
+function neutral(): string {
+  return readColorToken('--color-cat-root', '#9aa0aa');
+}
 
 function hash(value: string): number {
   let total = 0;
@@ -70,12 +78,13 @@ export function topFolder(path: string): string {
   return at === -1 ? '(รากโปรเจกต์)' : path.slice(0, at);
 }
 
-/** ไล่สีตามจำนวนไฟล์ที่พึ่งพา — ใช้ hue เดียวแล้วไล่ความเข้ม เพื่อให้อ่านเป็นลำดับได้จริง */
+/** ไล่สีตามจำนวนไฟล์ที่พึ่งพา — ใช้ hue เดียวกับสีเน้นของระบบ (cyanotype) แล้วไล่ความเข้ม
+ * เพื่อให้อ่านเป็นลำดับได้จริง และยังผูกกับภาษาภาพเดียวกับส่วนที่เหลือของเว็บ */
 function heat(value: number, max: number): string {
   const ratio = max <= 0 ? 0 : Math.min(value / max, 1);
   const lightness = 72 - ratio * 34;
   const saturation = 30 + ratio * 45;
-  return `hsl(220 ${saturation.toFixed(0)}% ${lightness.toFixed(0)}%)`;
+  return `hsl(191 ${saturation.toFixed(0)}% ${lightness.toFixed(0)}%)`;
 }
 
 export function colorFor(
@@ -87,8 +96,9 @@ export function colorFor(
   if (mode === 'dependents') return heat(node.dependents, maxDependents);
   if (mode === 'blast') return heat(node.blast, maxBlast);
   const key = mode === 'language' ? (node.language ?? '') : topFolder(node.path);
-  if (!key) return NEUTRAL;
-  return PALETTE[hash(key) % PALETTE.length] ?? NEUTRAL;
+  if (!key) return neutral();
+  const swatches = palette();
+  return swatches[hash(key) % swatches.length] ?? neutral();
 }
 
 /** ขนาดโหนดสื่อถึงขนาดไฟล์ ส่วนความสำคัญสื่อด้วยสีและการเน้น จะได้ไม่ทับความหมายกัน */

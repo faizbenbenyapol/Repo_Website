@@ -20,14 +20,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
         <link
           rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap"
         />
       </head>
       <body className="min-h-screen">
         <header className="border-b border-line">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-4 sm:px-6">
-            <a href="/" className="font-display text-lg font-semibold tracking-tight">
-              RepoLens
+            <a href="/" className="font-display text-lg font-bold tracking-tight">
+              Repo<span className="text-accent">Lens</span>
             </a>
             <nav className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted sm:gap-x-5">
               <a className="transition-colors hover:text-accent" href="/versions">

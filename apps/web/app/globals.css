@@ -1,34 +1,47 @@
 @import 'tailwindcss';
 
+/*
+ * ทิศทางดีไซน์ v0.8.1 — เลิกโทน "แดชบอร์ด AI" (ม่วง–น้ำเงินไล่เฉด, พื้นเข้ม, การ์ดเรืองแสง)
+ * เปลี่ยนเป็นโทนเครื่องมือช่าง: กระดาษสีเย็นจาง เส้นบางคมชัด สีเน้นน้ำเงินอมเขียวแบบหมึกพิมพ์เขียว
+ * (cyanotype/blueprint) เพราะสิ่งที่เว็บนี้ทำคือวาดแผนผังของโค้ด ไม่ใช่โชว์ว่าเป็น AI
+ *
+ * ทุกคู่สีตัวหนังสือ/พื้นเผื่อขอบคอนทราสต์เกิน 4.5:1 ของ WCAG ไว้มาก (มักคำนวณได้ ≥ 5.5:1)
+ * เพราะบทเรียนจาก v0.8.0: ตัวอักษรเล็กที่เรนเดอร์จริงมี anti-aliasing ที่ลดคอนทราสต์จากค่าคำนวณ
+ * ตามสูตรอีกชั้นหนึ่งเสมอ ยิ่งเผื่อมากยิ่งชัวร์ว่าผ่านตอนวัดด้วย axe-core จริง
+ */
 @theme {
-  --color-bg: #eff2f7;
+  --color-bg: #f5f6f9;
   --color-surface: #ffffff;
-  --color-surface-2: #e7ebf3;
-  --color-sunken: #e2e7f1;
-  --color-line: #c7d0e1;
-  --color-line-soft: #dce2ee;
-  --color-text: #131a2b;
-  /* เข้มพอที่คอนทราสต์กับพื้น --color-bg ถึง 4.5:1 จริงตอนเรนเดอร์ (v0.8.0)
-     ค่าเดิม #57627c คำนวณตามสูตรได้ 5.4:1 แต่ตัวอักษรเล็กที่เรนเดอร์จริงมี anti-aliasing
-     ทำให้คอนทราสต์ที่วัดจากพิกเซลจริงลดลงเหลือ ~4.5:1 เท่านั้น จึงเผื่อขอบไว้มากขึ้น */
-  --color-muted: #414c66;
-  --color-faint: #4d5771;
-  --color-accent: #2a57c6;
-  --color-accent-soft: #dfe6f8;
-  /* ตัวหนังสือบนพื้นสีเน้น — แยกจาก --color-accent ตั้งใจ (v0.8.0)
-     ธีมมืดใช้สีเน้นแบบพาสเทลสว่างให้ตัวมันเองอ่านออกบนพื้นมืด แต่พาสเทลสว่างขนาดนั้น
-     ใส่ตัวหนังสือขาวทับไม่ผ่าน 4.5:1 (วัดจริงได้ 2.29:1) ปุ่มธีมมืดจึงต้องใช้ตัวหนังสือเข้มแทน */
+  --color-surface-2: #eceef3;
+  --color-sunken: #e7e9ee;
+  --color-line: #d7dbe3;
+  --color-line-soft: #e6e9ee;
+  --color-text: #12151b;
+  --color-muted: #4a5261;
+  --color-faint: #5c6472;
+  --color-accent: #0a6478;
+  --color-accent-soft: #d7edf1;
   --color-on-accent: #ffffff;
-  /* เข้มพอที่คอนทราสต์ ≥ 4.5:1 จริงตอนเรนเดอร์บนพื้น --color-bg (v0.8.0) — เหตุผลเดียวกับด้านบน */
-  --color-brass: #5c4310;
-  --color-brass-soft: #f0e6cf;
+  --color-brass: #7d5606;
+  --color-brass-soft: #f3e6cd;
 
   /* สีเชิงความหมาย แยกจากสีเน้น เพราะบอกสถานะของข้อมูล ไม่ใช่สิ่งที่ผู้ใช้เลือกอยู่ */
-  --color-good: #1c7a50;
-  --color-warn: #9a6706;
-  --color-crit: #af3728;
+  --color-good: #136a49;
+  --color-warn: #7d5606;
+  --color-crit: #9c2f22;
 
-  --font-display: 'Bai Jamjuree', 'IBM Plex Sans Thai', system-ui, sans-serif;
+  /* ตัวหนังสือของกราฟความสัมพันธ์ แยกเป็นชุดสีมิวเต็ดของตัวเอง ไม่ใช้สีเน้นหลักซ้ำ
+     เพื่อให้กราฟอ่านเป็นหมวดหมู่ได้ชัด แต่ไม่มีสีไหนสว่างจนแย่งความสนใจจากสีเน้น */
+  --color-cat-assets: #4f7d67;
+  --color-cat-models: #a8822f;
+  --color-cat-views: #0a6478;
+  --color-cat-controllers: #7d5270;
+  --color-cat-sql: #4f6486;
+  --color-cat-core: #6b7280;
+  --color-cat-scripts: #995a56;
+  --color-cat-root: #9aa0aa;
+
+  --font-display: 'IBM Plex Sans Thai', 'IBM Plex Sans', system-ui, sans-serif;
   --font-sans: 'IBM Plex Sans Thai', 'Noto Sans Thai', system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
 
@@ -39,47 +52,61 @@
 /* ธีมมืดตามค่าของเครื่องผู้ใช้ แต่ถ้าผู้ใช้เลือกสว่างไว้ชัดเจน ค่าที่เลือกต้องชนะ */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --color-bg: #0b111e;
-    --color-surface: #111a2b;
-    --color-surface-2: #172134;
-    --color-sunken: #0e1626;
-    --color-line: #26314a;
-    --color-line-soft: #1c2640;
-    --color-text: #e2e8f5;
-    --color-muted: #909dbb;
-    /* คอนทราสต์ที่วัดจริงของ #6c789a บนพื้นมืดได้แค่ ~4:1 (v0.8.0) จึงสว่างขึ้นให้ผ่าน 4.5:1 */
-    --color-faint: #8994b3;
-    --color-accent: #88a9ff;
-    --color-accent-soft: #1b2a4d;
-    /* ตัวหนังสือเข้มบนปุ่มสีเน้นพาสเทลของธีมมืด (เหตุผลเต็มอยู่ที่นิยามใน :root ด้านบน) */
-    --color-on-accent: #0b111e;
-    --color-brass: #d9b463;
+    --color-bg: #0b0f14;
+    --color-surface: #11161d;
+    --color-surface-2: #171d26;
+    --color-sunken: #0e1319;
+    --color-line: #262e3a;
+    --color-line-soft: #1c232d;
+    --color-text: #e7eaef;
+    --color-muted: #a7afbd;
+    --color-faint: #8992a1;
+    --color-accent: #52c2de;
+    --color-accent-soft: #123540;
+    --color-on-accent: #06181c;
+    --color-brass: #e0ac4c;
     --color-brass-soft: #2c2415;
-    --color-good: #4fbf8b;
-    --color-warn: #e0a94a;
-    --color-crit: #f0796a;
+    --color-good: #57cc9c;
+    --color-warn: #e0ac4c;
+    --color-crit: #ea7a6c;
+    --color-cat-assets: #7fb79b;
+    --color-cat-models: #d3ab5c;
+    --color-cat-views: #52c2de;
+    --color-cat-controllers: #b98bab;
+    --color-cat-sql: #8ea3c7;
+    --color-cat-core: #9aa2b0;
+    --color-cat-scripts: #d08d88;
+    --color-cat-root: #7d8591;
   }
 }
 
 /* และถ้าผู้ใช้เลือกมืดไว้ชัดเจน ก็ต้องชนะเครื่องที่ตั้งเป็นสว่างเช่นกัน */
 :root[data-theme='dark'] {
-  --color-bg: #0b111e;
-  --color-surface: #111a2b;
-  --color-surface-2: #172134;
-  --color-sunken: #0e1626;
-  --color-line: #26314a;
-  --color-line-soft: #1c2640;
-  --color-text: #e2e8f5;
-  --color-muted: #909dbb;
-  --color-faint: #8994b3;
-  --color-accent: #88a9ff;
-  --color-accent-soft: #1b2a4d;
-  --color-on-accent: #0b111e;
-  --color-brass: #d9b463;
+  --color-bg: #0b0f14;
+  --color-surface: #11161d;
+  --color-surface-2: #171d26;
+  --color-sunken: #0e1319;
+  --color-line: #262e3a;
+  --color-line-soft: #1c232d;
+  --color-text: #e7eaef;
+  --color-muted: #a7afbd;
+  --color-faint: #8992a1;
+  --color-accent: #52c2de;
+  --color-accent-soft: #123540;
+  --color-on-accent: #06181c;
+  --color-brass: #e0ac4c;
   --color-brass-soft: #2c2415;
-  --color-good: #4fbf8b;
-  --color-warn: #e0a94a;
-  --color-crit: #f0796a;
+  --color-good: #57cc9c;
+  --color-warn: #e0ac4c;
+  --color-crit: #ea7a6c;
+  --color-cat-assets: #7fb79b;
+  --color-cat-models: #d3ab5c;
+  --color-cat-views: #52c2de;
+  --color-cat-controllers: #b98bab;
+  --color-cat-sql: #8ea3c7;
+  --color-cat-core: #9aa2b0;
+  --color-cat-scripts: #d08d88;
+  --color-cat-root: #7d8591;
 }
 
 @layer base {
@@ -126,6 +153,16 @@
 
   .rise {
     animation: rise 0.45s var(--ease-ui) both;
+  }
+
+  /* พื้นตารางกริดจาง ๆ แบบกระดาษเขียนแบบ ให้กราฟความสัมพันธ์อ่านเป็นแผนผังทางเทคนิค
+     ไม่ใช่จุดสีลอยอยู่กลางความว่างเปล่าแบบเดิม */
+  .graph-grid {
+    background-image:
+      linear-gradient(var(--color-line-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--color-line-soft) 1px, transparent 1px);
+    background-size: 28px 28px;
+    background-color: var(--color-surface);
   }
 }
 

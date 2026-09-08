@@ -52,119 +52,151 @@ export function DependencyGraph({ data, selected, onSelect, colorMode, visible }
   // สร้างกราฟใหม่เมื่อชุดข้อมูลเปลี่ยน — การจัดวางตำแหน่งทำครั้งเดียวเพราะกินแรงที่สุด
   useEffect(() => {
     if (supported !== true || !containerRef.current) return;
+    const container = containerRef.current;
 
-    const graph = new Graph({ type: 'directed', multi: false });
-    const maxDependents = data.nodes.reduce((max, node) => Math.max(max, node.dependents), 0);
-    const maxBlast = data.nodes.reduce((max, node) => Math.max(max, node.blast), 0);
-    const count = Math.max(data.nodes.length, 1);
+    // คอนเทนเนอร์อาจยังไม่มีขนาดตอนเอฟเฟกต์นี้ทำงานรอบแรก (เช่น โหลดผ่าน dynamic import
+    // แบบปิด SSR แล้ว layout ของหน้ายังไม่นิ่ง) — sigma โยน error ทันทีถ้าสร้างตอนกว้าง/สูงเป็น 0
+    // จึงต้องรอให้คอนเทนเนอร์วัดขนาดได้จริงก่อนค่อยสร้างกราฟ
+    let cancelled = false;
+    let cleanupRenderer: (() => void) | null = null;
 
-    data.nodes.forEach((node, index) => {
-      // เริ่มจากวงกลม แล้วให้ ForceAtlas2 จัดต่อ ได้ผลนิ่งกว่าเริ่มจากตำแหน่งสุ่มล้วน
-      const angle = (index / count) * Math.PI * 2;
-      graph.addNode(node.path, {
-        label: node.path.slice(node.path.lastIndexOf('/') + 1),
-        x: Math.cos(angle) * (1 + (index % 7) / 7),
-        y: Math.sin(angle) * (1 + (index % 5) / 5),
-        size: sizeFor(node),
-        color: colorFor(node, colorMode, maxDependents, maxBlast),
+    function build() {
+      if (cancelled) return;
+      const graph = new Graph({ type: 'directed', multi: false });
+      const maxDependents = data.nodes.reduce((max, node) => Math.max(max, node.dependents), 0);
+      const maxBlast = data.nodes.reduce((max, node) => Math.max(max, node.blast), 0);
+      const count = Math.max(data.nodes.length, 1);
+
+      data.nodes.forEach((node, index) => {
+        // เริ่มจากวงกลม แล้วให้ ForceAtlas2 จัดต่อ ได้ผลนิ่งกว่าเริ่มจากตำแหน่งสุ่มล้วน
+        const angle = (index / count) * Math.PI * 2;
+        graph.addNode(node.path, {
+          label: node.path.slice(node.path.lastIndexOf('/') + 1),
+          x: Math.cos(angle) * (1 + (index % 7) / 7),
+          y: Math.sin(angle) * (1 + (index % 5) / 5),
+          size: sizeFor(node),
+          color: colorFor(node, colorMode, maxDependents, maxBlast),
+        });
       });
-    });
 
-    for (const edge of data.edges) {
-      if (
-        graph.hasNode(edge.src) &&
-        graph.hasNode(edge.dst) &&
-        !graph.hasEdge(edge.src, edge.dst)
-      ) {
-        graph.addDirectedEdge(edge.src, edge.dst, { size: 0.6, weight: edge.confidence });
+      for (const edge of data.edges) {
+        if (
+          graph.hasNode(edge.src) &&
+          graph.hasNode(edge.dst) &&
+          !graph.hasEdge(edge.src, edge.dst)
+        ) {
+          graph.addDirectedEdge(edge.src, edge.dst, { size: 0.6, weight: edge.confidence });
+        }
       }
-    }
 
-    if (graph.order > 1) {
-      const iterations = graph.order > 1500 ? 80 : graph.order > 400 ? 200 : 400;
-      forceAtlas2.assign(graph, {
-        iterations,
-        settings: { ...forceAtlas2.inferSettings(graph), adjustSizes: true, gravity: 0.6 },
-      });
-    }
+      if (graph.order > 1) {
+        const iterations = graph.order > 1500 ? 80 : graph.order > 400 ? 200 : 400;
+        forceAtlas2.assign(graph, {
+          iterations,
+          settings: { ...forceAtlas2.inferSettings(graph), adjustSizes: true, gravity: 0.6 },
+        });
+      }
 
-    const dim = readToken('--color-faint', '#8590a8');
-    const edgeColor = readToken('--color-line', '#c7d0e1');
-    const accent = readToken('--color-accent', '#2a57c6');
+      const dim = readToken('--color-faint', '#5c6472');
+      const edgeColor = readToken('--color-line', '#d7dbe3');
+      const accent = readToken('--color-accent', '#0a6478');
 
-    const renderer = new Sigma(graph, containerRef.current, {
-      renderLabels: true,
-      labelRenderedSizeThreshold: 8,
-      labelFont: 'IBM Plex Mono, monospace',
-      labelSize: 11,
-      labelColor: { color: dim },
-      defaultEdgeColor: edgeColor,
-      minCameraRatio: 0.05,
-      maxCameraRatio: 8,
-      nodeReducer: (key, attributes) => {
-        const { selected: current, visible: filter, hovered } = stateRef.current;
-        const isSelected = key === current;
-        const neighbourOf = current ?? hovered;
-        const related =
-          neighbourOf !== null &&
-          (key === neighbourOf ||
-            graph.hasEdge(neighbourOf, key) ||
-            graph.hasEdge(key, neighbourOf));
-        const filteredOut = filter !== null && !filter.has(key);
+      const renderer = new Sigma(graph, container, {
+        renderLabels: true,
+        labelRenderedSizeThreshold: 8,
+        labelFont: 'IBM Plex Mono, monospace',
+        labelSize: 11,
+        labelColor: { color: dim },
+        defaultEdgeColor: edgeColor,
+        minCameraRatio: 0.05,
+        maxCameraRatio: 8,
+        nodeReducer: (key, attributes) => {
+          const { selected: current, visible: filter, hovered } = stateRef.current;
+          const isSelected = key === current;
+          const neighbourOf = current ?? hovered;
+          const related =
+            neighbourOf !== null &&
+            (key === neighbourOf ||
+              graph.hasEdge(neighbourOf, key) ||
+              graph.hasEdge(key, neighbourOf));
+          const filteredOut = filter !== null && !filter.has(key);
 
-        if (filteredOut)
-          return { ...attributes, color: dim, size: attributes.size * 0.5, label: '' };
-        if (isSelected) {
-          return {
-            ...attributes,
-            color: accent,
-            size: attributes.size * 1.6,
-            zIndex: 2,
-            forceLabel: true,
-          };
-        }
-        if (neighbourOf !== null && !related) {
-          return { ...attributes, color: dim, label: '' };
-        }
-        return attributes;
-      },
-      edgeReducer: (key, attributes) => {
-        const { selected: current, visible: filter, hovered } = stateRef.current;
-        const focus = current ?? hovered;
-        const [src, dst] = graph.extremities(key);
-        const filteredOut = filter !== null && (!filter.has(src) || !filter.has(dst));
-        if (filteredOut) return { ...attributes, hidden: true };
-        if (focus !== null) {
-          if (src === focus || dst === focus) {
-            return { ...attributes, color: accent, size: 1.2, zIndex: 1 };
+          if (filteredOut)
+            return { ...attributes, color: dim, size: attributes.size * 0.5, label: '' };
+          if (isSelected) {
+            return {
+              ...attributes,
+              color: accent,
+              size: attributes.size * 1.6,
+              zIndex: 2,
+              forceLabel: true,
+            };
           }
-          return { ...attributes, hidden: true };
-        }
-        return attributes;
-      },
-    });
+          if (neighbourOf !== null && !related) {
+            return { ...attributes, color: dim, label: '' };
+          }
+          return attributes;
+        },
+        edgeReducer: (key, attributes) => {
+          const { selected: current, visible: filter, hovered } = stateRef.current;
+          const focus = current ?? hovered;
+          const [src, dst] = graph.extremities(key);
+          const filteredOut = filter !== null && (!filter.has(src) || !filter.has(dst));
+          if (filteredOut) return { ...attributes, hidden: true };
+          if (focus !== null) {
+            if (src === focus || dst === focus) {
+              return { ...attributes, color: accent, size: 1.2, zIndex: 1 };
+            }
+            return { ...attributes, hidden: true };
+          }
+          return attributes;
+        },
+      });
 
-    renderer.on('clickNode', ({ node }) => onSelect(node));
-    renderer.on('clickStage', () => onSelect(null));
-    renderer.on('enterNode', ({ node }) => {
-      stateRef.current.hovered = node;
-      renderer.refresh();
-      if (containerRef.current) containerRef.current.style.cursor = 'pointer';
-    });
-    renderer.on('leaveNode', () => {
-      stateRef.current.hovered = null;
-      renderer.refresh();
-      if (containerRef.current) containerRef.current.style.cursor = 'default';
-    });
+      renderer.on('clickNode', ({ node }) => onSelect(node));
+      renderer.on('clickStage', () => onSelect(null));
+      renderer.on('enterNode', ({ node }) => {
+        stateRef.current.hovered = node;
+        renderer.refresh();
+        container.style.cursor = 'pointer';
+      });
+      renderer.on('leaveNode', () => {
+        stateRef.current.hovered = null;
+        renderer.refresh();
+        container.style.cursor = 'default';
+      });
 
-    sigmaRef.current = renderer;
-    graphRef.current = graph;
-    setLaidOut(true);
+      sigmaRef.current = renderer;
+      graphRef.current = graph;
+      setLaidOut(true);
+
+      cleanupRenderer = () => {
+        renderer.kill();
+        sigmaRef.current = null;
+        graphRef.current = null;
+      };
+    }
+
+    if (container.offsetWidth > 0 && container.offsetHeight > 0) {
+      build();
+      return () => {
+        cancelled = true;
+        cleanupRenderer?.();
+      };
+    }
+
+    const observer = new ResizeObserver(() => {
+      if (container.offsetWidth > 0 && container.offsetHeight > 0) {
+        observer.disconnect();
+        build();
+      }
+    });
+    observer.observe(container);
 
     return () => {
-      renderer.kill();
-      sigmaRef.current = null;
-      graphRef.current = null;
+      cancelled = true;
+      observer.disconnect();
+      cleanupRenderer?.();
     };
   }, [data, colorMode, onSelect, supported]);
 
@@ -184,7 +216,7 @@ export function DependencyGraph({ data, selected, onSelect, colorMode, visible }
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div className="graph-grid relative h-full w-full">
       <div ref={containerRef} className="h-full w-full" data-testid="graph-canvas" />
 
       {supported === null || !laidOut ? (
